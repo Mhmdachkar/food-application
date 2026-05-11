@@ -15,6 +15,7 @@ import { fuzzyMatchItemName } from '../models/VoiceActions';
 import { useCartStore } from './CartStore';
 import { useAuthStore } from './AuthStore';
 import { useDataStore } from './DataStore';
+import { logger } from '../utils/logger';
 
 export const DEFAULT_QUICK_CHIPS: QuickChip[] = [
   { id: '1', label: "What's popular?", icon: 'fire', message: "What's popular right now?" },
@@ -24,6 +25,24 @@ export const DEFAULT_QUICK_CHIPS: QuickChip[] = [
   { id: '5', label: 'Spicy food', icon: 'pepper', message: 'I want something spicy' },
   { id: '6', label: 'Comfort food', icon: 'heart', message: 'I need some comfort food' },
 ];
+
+const CART_QUICK_CHIPS: QuickChip[] = [
+  { id: 'c1', label: 'View cart', icon: 'cart', message: "What's in my cart?" },
+  { id: 'c2', label: "That's all", icon: 'check', message: "That's all, I'm done ordering" },
+  { id: 'c3', label: 'Add more', icon: 'plus', message: "What else do you recommend?" },
+  { id: 'c4', label: 'Clear cart', icon: 'trash', message: 'Clear my cart' },
+];
+
+const POST_ORDER_CHIPS: QuickChip[] = [
+  { id: 'p1', label: 'Order again', icon: 'refresh', message: 'I want to place another order' },
+  { id: 'p2', label: 'Goodbye', icon: 'wave', message: 'Thanks, bye!' },
+];
+
+function getContextualChips(): QuickChip[] {
+  const cart = useCartStore.getState();
+  if (!cart.isEmpty()) return CART_QUICK_CHIPS;
+  return DEFAULT_QUICK_CHIPS;
+}
 
 export interface VoiceCallStateStore {
   callState: VoiceCallState;
@@ -79,7 +98,7 @@ async function speakWithTTS(text: string, enabled: boolean): Promise<void> {
   try {
     await audioService.playTTS(text, 'nova');
   } catch (err) {
-    console.warn('[VoiceCallStore] TTS playback failed, ignoring:', err);
+    logger.warn('[VoiceCallStore] TTS playback failed, ignoring:', err);
   }
 }
 
@@ -98,15 +117,30 @@ function detectLanguage(text: string): string {
  * Format: |||ACTION:{ JSON }|||
  */
 function parseAction(text: string): { cleanText: string; action: VoiceAction | null } {
-  const actionRegex = /\|\|\|ACTION:([\s\S]+?)\|\|\|/g;
+  // Match action blocks: |||ACTION:{...}||| — also handle missing closing |||
+  const actionRegex = /\.?\s*\|{2,3}\s*ACTION\s*:\s*([\s\S]+?)\|{2,3}/gi;
   const matches = [...text.matchAll(actionRegex)];
 
   if (matches.length === 0) {
-    return { cleanText: text.trim(), action: null };
+    // Also catch partial/malformed action tags the AI might emit
+    const partialRegex = /\.?\s*\|{2,3}\s*ACTION\s*:\s*\{[^}]*\}?\s*\|{0,3}\s*$/gi;
+    let cleanText = text.replace(partialRegex, '').trim();
+    // Remove any leftover |||...  fragments
+    cleanText = cleanText.replace(/\|{2,3}[^|]*$/g, '').trim();
+    return { cleanText, action: null };
   }
 
+  // Strip ALL action blocks (including leading dots/punctuation) from display text
   let cleanText = text.replace(actionRegex, '').trim();
-  cleanText = cleanText.replace(/\s{2,}/g, ' ').trim();
+  // Clean up leftover punctuation, double spaces, trailing dots from stripping
+  cleanText = cleanText
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\.\s*$/, '')       // trailing dot left after stripping
+    .replace(/^\.\s*/, '')       // leading dot
+    .trim();
+
+  // If clean text is empty after stripping, provide a minimal fallback
+  if (!cleanText) cleanText = '';
 
   const rawJson = matches[0][1].trim();
   try {
@@ -121,7 +155,7 @@ function parseAction(text: string): { cleanText: string; action: VoiceAction | n
       const action = JSON.parse(stripped) as VoiceAction;
       return { cleanText, action };
     } catch {
-      console.warn('[VoiceCallStore] Failed to parse action JSON:', rawJson);
+      logger.warn('[VoiceCallStore] Failed to parse action JSON:', rawJson);
       return { cleanText, action: null };
     }
   }
@@ -193,6 +227,14 @@ async function executeAction(
       return { success: true, message: `Updated ${cartItem.menuItem.name} to ${newQty}x.`, action };
     }
 
+    case 'set_item_note': {
+      const success = cartStore.setItemNote(action.itemName, action.note);
+      if (!success) {
+        return { success: false, message: `"${action.itemName}" is not in your cart. Add it first, then I can add notes.`, action };
+      }
+      return { success: true, message: `Note added to ${action.itemName}: "${action.note}"`, action };
+    }
+
     case 'clear_cart': {
       if (cartStore.isEmpty()) {
         return { success: true, message: 'Your cart is already empty.', action };
@@ -262,9 +304,9 @@ async function executeAction(
           };
         }
         // Supabase failed — place locally as fallback
-        console.warn('[VoiceCallStore] Supabase order failed, placing locally');
+        logger.warn('[VoiceCallStore] Supabase order failed, placing locally');
       } catch (err: any) {
-        console.warn('[VoiceCallStore] Order placement error:', err?.message);
+        logger.warn('[VoiceCallStore] Order placement error:', err?.message);
       }
       // Fallback: local-only order confirmation
       const itemCount = cart.itemCount();
@@ -330,18 +372,18 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
     // dialog doesn't interfere with auto-listen and the user grants it up front.
     const micOk = await audioService.ensureMicPermission();
     if (!micOk) {
-      console.error('[VoiceCallStore] Mic permission denied — call cannot proceed in live mode');
+      logger.error('[VoiceCallStore] Mic permission denied — call cannot proceed in live mode');
       set({ connectionError: 'Microphone permission is required for voice calls. Please allow microphone access.' });
     }
 
     await foodMemoryService.load();
     menuSearchService.buildIndex(menuItems);
-    console.log('[VoiceCallStore] Menu items loaded for call:', menuItems.length);
+    logger.log('[VoiceCallStore] Menu items loaded for call:', menuItems.length);
 
     // Verify API connectivity (non-blocking — call starts either way)
     voiceAIService.verifyConnection().then(connCheck => {
       if (!connCheck.ok) {
-        console.error('[VoiceCallStore] Connection check failed:', connCheck.error);
+        logger.error('[VoiceCallStore] Connection check failed:', connCheck.error);
         set({ connectionError: connCheck.error ?? 'Cannot reach AI service' });
       }
     });
@@ -375,7 +417,7 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
     });
 
     await speakWithTTS(greetingText, get().isTTSEnabled);
-    console.log('[VoiceCallStore] Greeting TTS finished, scheduling auto-listen');
+    logger.log('[VoiceCallStore] Greeting TTS finished, scheduling auto-listen');
     set({ callState: 'idle' });
     _autoListenAfterSpeak(get, set);
   },
@@ -442,7 +484,7 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
   startRecording: async () => {
     const s = get();
     if (_recordingBusy || s.isRecording || s.callState === 'thinking' || s.callState === 'transcribing' || s.callState === 'speaking' || s.isMuted) {
-      console.log('[VoiceCallStore] startRecording blocked — busy:', _recordingBusy, 'state:', s.callState, 'recording:', s.isRecording, 'muted:', s.isMuted);
+      logger.log('[VoiceCallStore] startRecording blocked — busy:', _recordingBusy, 'state:', s.callState, 'recording:', s.isRecording, 'muted:', s.isMuted);
       return;
     }
     _recordingBusy = true;
@@ -452,10 +494,10 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
 
       const onSilence = get().isLiveMode
         ? () => {
-            console.log('[VoiceCallStore] Silence callback fired');
+            logger.log('[VoiceCallStore] Silence callback fired');
             if (get().isRecording) {
               get().stopRecording().catch(err => {
-                console.error('[VoiceCallStore] stopRecording from silence failed:', err);
+                logger.error('[VoiceCallStore] stopRecording from silence failed:', err);
                 _recordingBusy = false;
                 _scheduleAutoListen(get, set, 1500);
               });
@@ -465,10 +507,10 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
 
       const started = await audioService.startRecording(onSilence);
       if (started) {
-        console.log('[VoiceCallStore] Recording started, entering listening state');
+        logger.log('[VoiceCallStore] Recording started, entering listening state');
         set({ isRecording: true, callState: 'listening', showQuickChips: false });
       } else {
-        console.warn('[VoiceCallStore] Failed to start recording');
+        logger.warn('[VoiceCallStore] Failed to start recording');
         _scheduleAutoListen(get, set, 1000);
       }
     } finally {
@@ -478,38 +520,38 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
 
   stopRecording: async () => {
     if (!get().isRecording) {
-      console.log('[VoiceCallStore] stopRecording called but not recording');
+      logger.log('[VoiceCallStore] stopRecording called but not recording');
       return;
     }
     _recordingBusy = true;
-    console.log('[VoiceCallStore] Stopping recording...');
+    logger.log('[VoiceCallStore] Stopping recording...');
     set({ isRecording: false, callState: 'transcribing' });
 
     try {
       const transcription = await audioService.stopRecordingAndTranscribe(get().detectedLanguage);
       const trimmed = transcription?.trim() ?? '';
-      console.log('[VoiceCallStore] Transcription result:', JSON.stringify(trimmed.substring(0, 80)), 'hadVoice:', audioService.hadVoiceActivity());
+      logger.log('[VoiceCallStore] Transcription result:', JSON.stringify(trimmed.substring(0, 80)), 'hadVoice:', audioService.hadVoiceActivity());
 
       if (trimmed.length > 0) {
         _consecutiveErrors = 0; // Reset on successful transcription
         const lang = detectLanguage(trimmed);
         if (lang !== get().detectedLanguage) {
-          console.log('[VoiceCallStore] Language detected:', lang);
+          logger.log('[VoiceCallStore] Language detected:', lang);
           set({ detectedLanguage: lang });
           audioService.setLanguage(lang);
         }
         await get().sendTextMessage(trimmed);
       } else {
-        console.log('[VoiceCallStore] Empty transcription, re-listening...');
+        logger.log('[VoiceCallStore] Empty transcription, re-listening...');
         _scheduleAutoListen(get, set, 400);
       }
     } catch (err: any) {
-      console.error('[VoiceCallStore] STT error:', err);
+      logger.error('[VoiceCallStore] STT error:', err);
       _consecutiveErrors++;
 
       if (_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         // Too many consecutive errors — pause auto-listen, show helpful message
-        console.warn('[VoiceCallStore] Too many consecutive STT errors, pausing auto-listen');
+        logger.warn('[VoiceCallStore] Too many consecutive STT errors, pausing auto-listen');
         const pauseMessage: ConversationMessage = {
           id: `${Date.now()}-stt-pause`,
           role: 'assistant',
@@ -611,9 +653,9 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
       if (action && action.type !== 'none') {
         actionResult = await executeAction(action, menuItemsFull, get, set);
         if (!actionResult.success) {
-          console.warn('[VoiceCallStore] Action failed:', actionResult.message);
+          logger.warn('[VoiceCallStore] Action failed:', actionResult.message);
         } else {
-          console.log('[VoiceCallStore] Action executed:', actionResult.message);
+          logger.log('[VoiceCallStore] Action executed:', actionResult.message);
         }
       }
 
@@ -640,11 +682,18 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
         audioService.setLanguage('ar');
       }
 
+      // Determine contextual quick chips based on state
+      const isOrderJustPlaced = actionResult?.success && action?.type === 'confirm_order';
+      const nextChips = isOrderJustPlaced
+        ? POST_ORDER_CHIPS
+        : getContextualChips();
+
       set(state => ({
         messages: [...state.messages, assistantMessage],
         conversationHistory: historyWithReply,
         callState: 'speaking',
         showQuickChips: !get().isLiveMode,
+        quickChips: nextChips,
         lastActionResult: actionResult,
       }));
 
@@ -654,7 +703,7 @@ export const useVoiceCallStore = create<VoiceCallStateStore>((set, get) => ({
       }
       _autoListenAfterSpeak(get, set);
     } catch (e: any) {
-      console.error('[VoiceCallStore] sendTextMessage error:', e);
+      logger.error('[VoiceCallStore] sendTextMessage error:', e);
       const errorText = e?.message ?? 'Something went wrong talking to the assistant. Please try again.';
       const errorMessage: ConversationMessage = {
         id: `${Date.now()}-error`,
@@ -685,12 +734,12 @@ function _tryStartRecording(get: () => VoiceCallStateStore): void {
     current.callState !== 'transcribing' &&
     current.callState !== 'speaking'
   ) {
-    console.log('[VoiceCallStore] Auto-listen: starting recording');
+    logger.log('[VoiceCallStore] Auto-listen: starting recording');
     get().startRecording().catch(err => {
-      console.error('[VoiceCallStore] Auto-listen startRecording error:', err);
+      logger.error('[VoiceCallStore] Auto-listen startRecording error:', err);
     });
   } else {
-    console.log('[VoiceCallStore] Auto-listen: skipped (state:', current.callState, 'recording:', current.isRecording, ')');
+    logger.log('[VoiceCallStore] Auto-listen: skipped (state:', current.callState, 'recording:', current.isRecording, ')');
   }
 }
 
@@ -707,7 +756,7 @@ function _scheduleAutoListen(
     return;
   }
   if (s.callState !== 'thinking') {
-    console.log('[VoiceCallStore] _scheduleAutoListen: setting idle, delay:', delayMs, 'ms');
+    logger.log('[VoiceCallStore] _scheduleAutoListen: setting idle, delay:', delayMs, 'ms');
     set({ callState: 'idle' });
   }
   _trackTimer(setTimeout(() => _tryStartRecording(get), delayMs));

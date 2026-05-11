@@ -5,6 +5,7 @@ import type { UserRole } from '../models/UserRole';
 import type { FoodMemory } from '../models/FoodMemory';
 import { authService } from '../services/AuthService';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { logger } from '../utils/logger';
 
 export interface AuthState {
   user: AppUser | null;
@@ -124,13 +125,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Try real Supabase sign-in if configured
     if (isSupabaseConfigured) {
       const creds = demoCredentials[role];
-      console.log('[AUTH] Quick login via Supabase:', creds.email);
+      logger.log('[AUTH] Quick login via Supabase:', creds.email);
       const result = await authService.signIn(creds.email, creds.password);
       if (result.user) {
         set({ user: result.user, role: result.user.role, isLoading: false, error: undefined });
         return;
       }
-      console.warn('[AUTH] Supabase quick login failed, falling back to offline:', result.error);
+      logger.warn('[AUTH] Supabase quick login failed, falling back to offline:', result.error);
     }
 
     // Fallback to offline demo users

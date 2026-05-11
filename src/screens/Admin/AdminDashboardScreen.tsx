@@ -186,6 +186,8 @@ export const AdminDashboardScreen: React.FC = () => {
           { icon: '\uD83D\uDCCB', label: 'Orders', route: '/admin/orders' },
           { icon: '\uD83C\uDF7D\uFE0F', label: 'Menu', route: '/admin/menu' },
           { icon: '\uD83D\uDE9A', label: 'Dispatch', route: '/admin/dispatch' },
+          { icon: '\uD83D\uDC65', label: 'Users', route: '/admin/users' },
+          { icon: '\uD83D\uDCAC', label: 'Messages', route: '/admin/messages' },
           { icon: '\u2699\uFE0F', label: 'Settings', route: '/admin/settings' },
         ].map(a => (
           <Pressable

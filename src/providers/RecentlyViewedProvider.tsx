@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { MenuItem } from '../models/MenuItem';
 import { useDataStore } from '../state/DataStore';
+import { logger } from '../utils/logger';
 
 const STORAGE_KEY = '@recently_viewed_ids';
 const MAX_ITEMS = 10;
@@ -30,7 +31,7 @@ export const RecentlyViewedProvider: React.FC<{ children: React.ReactNode }> = (
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) setIds(parsed);
         } catch {
-          console.log('[RecentlyViewed] Failed to parse stored IDs');
+          logger.log('[RecentlyViewed] Failed to parse stored IDs');
         }
       }
     });

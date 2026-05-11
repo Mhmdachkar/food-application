@@ -1,7 +1,8 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../src/theme/theme';
+import { colors, shadows } from '../../src/theme/theme';
 
 export default function AdminLayout() {
   return (
@@ -11,17 +12,13 @@ export default function AdminLayout() {
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
           backgroundColor: colors.cardBackground,
-          borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 6,
-          paddingTop: 4,
-          shadowColor: '#000',
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: -2 },
-          elevation: 8,
+          borderTopWidth: 0,
+          height: Platform.OS === 'ios' ? 80 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 6,
+          paddingTop: 6,
+          ...shadows.lg,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
         headerShown: false,
       }}
     >
@@ -29,37 +26,49 @@ export default function AdminLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => <Ionicons name="grid" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'grid' : 'grid-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="orders"
         options={{
           title: 'Orders',
-          tabBarIcon: ({ color, size }) => <Ionicons name="receipt" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="menu"
         options={{
           title: 'Menu',
-          tabBarIcon: ({ color, size }) => <Ionicons name="fast-food" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'fast-food' : 'fast-food-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="dispatch"
         options={{
           title: 'Dispatch',
-          tabBarIcon: ({ color, size }) => <Ionicons name="navigate" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'navigate' : 'navigate-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={22} color={color} />
+          ),
         }}
       />
+      <Tabs.Screen name="users" options={{ href: null }} />
+      <Tabs.Screen name="messages" options={{ href: null }} />
       <Tabs.Screen name="incidents" options={{ href: null }} />
     </Tabs>
   );

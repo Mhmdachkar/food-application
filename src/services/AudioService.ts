@@ -2,6 +2,7 @@ import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 import { voiceAIService } from './VoiceAIService';
+import { logger } from '../utils/logger';
 
 const isWeb = Platform.OS === 'web';
 
@@ -72,6 +73,11 @@ export class AudioService {
   private webMediaStream: MediaStream | null = null;
   private webMediaSource: MediaStreamAudioSourceNode | null = null;
 
+  // Web Speech API for browser-native STT (replaces Pollinations STT on web)
+  private webSpeechRecognition: any = null;
+  private webSpeechTranscript = '';
+  private webSpeechActive = false;
+
   setLanguage(lang: string): void {
     this.detectedLang = lang;
     const langMap: Record<string, string> = {
@@ -87,7 +93,7 @@ export class AudioService {
       tr: 'tr-TR',
     };
     this.ttsLanguage = langMap[lang] ?? `${lang}-${lang.toUpperCase()}`;
-    console.log('[AudioService] Language set:', this.detectedLang, '→ TTS:', this.ttsLanguage);
+    logger.log('[AudioService] Language set:', this.detectedLang, '→ TTS:', this.ttsLanguage);
   }
 
   async requestPermissions(): Promise<boolean> {
@@ -103,7 +109,7 @@ export class AudioService {
       }
       return granted;
     } catch (err) {
-      console.error('[AudioService] Permission error:', err);
+      logger.error('[AudioService] Permission error:', err);
       return false;
     }
   }
@@ -111,43 +117,50 @@ export class AudioService {
   /**
    * Start recording audio from the microphone.
    * In live mode, pass onSilence to auto-stop after silence.
+   *
+   * On WEB: Uses browser's SpeechRecognition API which handles recording,
+   * silence detection, AND transcription all in one — zero API calls needed.
+   *
+   * On NATIVE: Uses expo-av recording + silence detection + Pollinations STT.
    */
   async startRecording(onSilence?: () => void): Promise<boolean> {
+    // ── WEB: Use browser SpeechRecognition ──
+    if (isWeb) {
+      return this.startWebSpeechRecognition(onSilence);
+    }
+
+    // ── NATIVE: Use expo-av recording ──
     try {
       if (this.recording) {
         await this.cancelRecording();
       }
-      // Fully await playback cleanup to avoid audio session conflicts
       await this.stopPlaybackAsync();
 
       const hasPermission = await this.ensureMicPermission();
       if (!hasPermission) {
-        console.error('[AudioService] Microphone permission denied');
+        logger.error('[AudioService] Microphone permission denied');
         return false;
       }
 
-      // On native, explicitly switch audio mode to recording
-      if (!isWeb) {
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-          });
-        } catch (modeErr) {
-          console.warn('[AudioService] Audio mode switch failed, retrying:', modeErr);
-          await new Promise(r => setTimeout(r, 200));
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-          });
-        }
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+      } catch (modeErr) {
+        logger.warn('[AudioService] Audio mode switch failed, retrying:', modeErr);
+        await new Promise(r => setTimeout(r, 200));
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
       }
 
-      console.log('[AudioService] Starting recording...');
+      logger.log('[AudioService] Starting native recording...');
       const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
       this.recording = recording;
       this.recordingStartTime = Date.now();
@@ -156,28 +169,114 @@ export class AudioService {
       this.silenceCallbackFired = false;
       this.clearMaxRecordingTimer();
 
-      // Set up Web Audio API analyser for better web metering
-      if (isWeb && onSilence) {
-        await this.setupWebAudioAnalyser();
-      }
-
-      console.log('[AudioService] Recording started (silence:', !!onSilence, 'web:', isWeb, ')');
+      logger.log('[AudioService] Native recording started (silence:', !!onSilence, ')');
 
       if (onSilence) {
         this.startSilenceDetection();
         this.maxRecordingTimer = setTimeout(() => {
-          console.log('[AudioService] Hard max recording time reached, forcing stop');
+          logger.log('[AudioService] Hard max recording time reached, forcing stop');
           this.fireSilenceCallback();
-        }, isWeb ? WEB_MAX_RECORD_MS : HARD_MAX_RECORDING_MS);
+        }, HARD_MAX_RECORDING_MS);
       }
 
       return true;
     } catch (err) {
-      console.error('[AudioService] Start recording error:', err);
+      logger.error('[AudioService] Start recording error:', err);
       this.recording = null;
-      this.cleanupWebAudio();
       return false;
     }
+  }
+
+  /**
+   * Web-only: Start browser SpeechRecognition.
+   * Handles recording + silence detection + transcription in one step.
+   * When speech ends (silence detected by browser), fires onSilence callback.
+   */
+  private startWebSpeechRecognition(onSilence?: () => void): boolean {
+    try {
+      this.stopWebSpeechRecognition();
+      this.stopPlayback();
+
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        logger.error('[AudioService] SpeechRecognition not supported in this browser');
+        return false;
+      }
+
+      this.webSpeechTranscript = '';
+      this.webSpeechActive = true;
+      this.voiceDetected = false;
+      this.silenceCallbackFired = false;
+      this.recordingStartTime = Date.now();
+      this.onSilenceCallback = onSilence ?? null;
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false; // Auto-stop after silence
+      recognition.interimResults = true;
+      recognition.lang = this.ttsLanguage; // Match TTS language
+      recognition.maxAlternatives = 1;
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        this.webSpeechTranscript = transcript;
+        if (transcript.trim().length > 0) {
+          this.voiceDetected = true;
+        }
+        logger.log('[AudioService] Web STT interim:', transcript.substring(0, 60));
+      };
+
+      recognition.onend = () => {
+        logger.log('[AudioService] Web SpeechRecognition ended, transcript:', this.webSpeechTranscript.substring(0, 60) || '(empty)');
+        this.webSpeechActive = false;
+        // Fire silence callback to trigger the transcribe→AI→TTS flow
+        if (!this.silenceCallbackFired) {
+          this.silenceCallbackFired = true;
+          const cb = this.onSilenceCallback;
+          this.onSilenceCallback = null;
+          cb?.();
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        logger.warn('[AudioService] Web SpeechRecognition error:', event.error);
+        this.webSpeechActive = false;
+        // 'no-speech' is normal — user didn't speak, just fire silence
+        if (!this.silenceCallbackFired) {
+          this.silenceCallbackFired = true;
+          const cb = this.onSilenceCallback;
+          this.onSilenceCallback = null;
+          cb?.();
+        }
+      };
+
+      recognition.start();
+      this.webSpeechRecognition = recognition;
+
+      // Safety timeout: force stop after HARD_MAX_RECORDING_MS
+      this.maxRecordingTimer = setTimeout(() => {
+        logger.log('[AudioService] Web STT hard timeout, stopping');
+        this.stopWebSpeechRecognition();
+      }, HARD_MAX_RECORDING_MS);
+
+      logger.log('[AudioService] Web SpeechRecognition started (lang:', this.ttsLanguage, ')');
+      return true;
+    } catch (err) {
+      logger.error('[AudioService] Web SpeechRecognition start error:', err);
+      this.webSpeechActive = false;
+      return false;
+    }
+  }
+
+  private stopWebSpeechRecognition(): void {
+    if (this.webSpeechRecognition) {
+      try { this.webSpeechRecognition.stop(); } catch { /* ignore */ }
+      this.webSpeechRecognition = null;
+    }
+    this.webSpeechActive = false;
+    this.clearMaxRecordingTimer();
   }
 
   /**
@@ -196,9 +295,9 @@ export class AudioService {
       this.webAnalyser.smoothingTimeConstant = 0.3;
       this.webMediaSource = this.webAudioContext.createMediaStreamSource(stream);
       this.webMediaSource.connect(this.webAnalyser);
-      console.log('[AudioService] Web Audio API analyser initialized');
+      logger.log('[AudioService] Web Audio API analyser initialized');
     } catch (err) {
-      console.warn('[AudioService] Web Audio API setup failed, using fallback:', err);
+      logger.warn('[AudioService] Web Audio API setup failed, using fallback:', err);
       this.cleanupWebAudio();
     }
   }
@@ -242,26 +341,40 @@ export class AudioService {
   /**
    * Poll recording metering to detect silence and auto-stop.
    *
-   * Multi-strategy approach to handle devices where expo-av metering doesn't work:
+   * ARCHITECTURE: Three-tier approach for BOTH web and native:
    *
-   * 1. METERING MODE: If getStatusAsync().metering returns real values (> -120 dB),
-   *    use standard voice-detect → silence-after-voice logic.
+   * 1. METERING: If metering returns real dB values AND voice is detected (>= -30dB),
+   *    use voice-detect → silence-after-voice logic.
    *
-   * 2. FALLBACK MODE: If the first N metering polls all return -160/undefined,
-   *    metering is broken on this device. Switch to a fixed recording window
-   *    (FALLBACK_RECORD_DURATION_MS) and assume the user spoke during that time.
+   * 2. FALLBACK TIMER: If voice is never detected within FALLBACK_RECORD_DURATION_MS,
+   *    assume user spoke and force-fire silence callback. This handles:
+   *    - Web: browser mic gain too low, Web Audio API returning weak values
+   *    - Native: expo-av metering returning -160 / undefined
    *
    * 3. HARD CAP: maxRecordingTimer (set in startRecording) always fires as final safety net.
+   *
+   * The fallback timer is ALWAYS scheduled. If metering detects voice+silence first,
+   * the fallback is cancelled. This guarantees the recording always stops.
    */
   private startSilenceDetection(): void {
     this.stopSilenceDetection();
     let silentSince = 0;
-    let pollCount = 0;
-    let realMeteringCount = 0;
-    let meteringDecided = false;
-    let meteringWorks = false;
+    let fallbackScheduled = false;
 
-    console.log('[AudioService] Starting silence detection (platform:', Platform.OS, ')');
+    logger.log('[AudioService] Starting silence detection (platform:', Platform.OS, ', web:', isWeb, ')');
+
+    // ── ALWAYS schedule a fallback timer ──
+    // This guarantees recording stops even if metering never detects voice.
+    // If metering works and detects voice→silence first, fireSilenceCallback()
+    // will set silenceCallbackFired=true and the fallback becomes a no-op.
+    this.silenceTimer = setTimeout(() => {
+      if (this.silenceCallbackFired) return;
+      logger.log('[AudioService] Fallback timer fired — metering did not detect voice/silence in time');
+      this.voiceDetected = true;
+      this.fireSilenceCallback();
+    }, FALLBACK_RECORD_DURATION_MS);
+    fallbackScheduled = true;
+    logger.log('[AudioService] Fallback timer scheduled at', FALLBACK_RECORD_DURATION_MS, 'ms');
 
     this.meteringInterval = setInterval(async () => {
       if (!this.recording || this.silenceCallbackFired) {
@@ -273,102 +386,64 @@ export class AudioService {
       if (elapsed < MIN_RECORDING_MS) return;
 
       try {
-        // ── Web platform: use Web Audio API or time-based ──
-        const webLevel = this.getWebAudioLevel();
+        let db: number | null = null;
+
         if (isWeb) {
-          if (webLevel !== null) {
-            // Web Audio API works — use it like metering
-            const db = webLevel;
-            if (db >= VOICE_DETECTED_DB) {
-              this.voiceDetected = true;
-              silentSince = 0;
-              return;
-            }
-            if (this.voiceDetected && db < SILENCE_THRESHOLD_DB) {
-              if (silentSince === 0) silentSince = Date.now();
-              if (Date.now() - silentSince >= SILENCE_DURATION_MS) {
-                console.log('[AudioService] Web Audio silence detected');
-                this.fireSilenceCallback();
-              }
-            } else if (db >= SILENCE_THRESHOLD_DB) {
-              silentSince = 0;
-            }
-          } else {
-            // No Web Audio API — use time-based
-            if (elapsed >= WEB_MIN_RECORD_MS) {
-              this.voiceDetected = true;
-              if (silentSince === 0) silentSince = Date.now();
-              if (Date.now() - silentSince >= WEB_SILENCE_CHECK_MS) {
-                console.log('[AudioService] Web time-based silence trigger');
-                this.fireSilenceCallback();
-              }
-            }
-          }
-          return;
-        }
-
-        // ── Native platform: expo-av metering with fallback ──
-        const status = await this.recording.getStatusAsync();
-        if (!status.isRecording) return;
-        const db = status.metering ?? -160;
-        pollCount++;
-
-        // Phase 1: Determine if metering actually works on this device
-        if (!meteringDecided) {
-          if (db > METERING_NO_DATA_DB) {
-            realMeteringCount++;
-          }
-          if (pollCount >= METERING_CHECK_POLLS) {
-            meteringDecided = true;
-            meteringWorks = realMeteringCount > 0;
-            if (meteringWorks) {
-              console.log('[AudioService] Metering is working (', realMeteringCount, '/', pollCount, ' real readings)');
-            } else {
-              console.log('[AudioService] Metering NOT working — switching to time-based fallback');
-              // Schedule fallback stop: record for FALLBACK_RECORD_DURATION_MS total
-              const remainingMs = Math.max(500, FALLBACK_RECORD_DURATION_MS - elapsed);
-              this.silenceTimer = setTimeout(() => {
-                console.log('[AudioService] Fallback timer fired after', FALLBACK_RECORD_DURATION_MS, 'ms total recording');
-                this.voiceDetected = true; // Assume user spoke
-                this.fireSilenceCallback();
-              }, remainingMs);
-            }
-          }
-          // While deciding, don't block — just collect data
-          // But still detect obvious voice
-          if (db >= VOICE_DETECTED_DB) {
-            this.voiceDetected = true;
-            silentSince = 0;
-          }
-          return;
-        }
-
-        // Phase 2a: Metering works — standard voice-detect + silence logic
-        if (meteringWorks) {
-          if (db >= VOICE_DETECTED_DB) {
-            if (!this.voiceDetected) {
-              console.log('[AudioService] Voice detected (dB:', db.toFixed(1), ')');
-            }
-            this.voiceDetected = true;
-            silentSince = 0;
+          // Web: try Web Audio API analyser
+          db = this.getWebAudioLevel();
+          if (db === null) {
+            // No analyser available — fallback timer will handle it
             return;
           }
-
-          if (!this.voiceDetected) return;
-
-          if (db < SILENCE_THRESHOLD_DB) {
-            if (silentSince === 0) silentSince = Date.now();
-            const silentFor = Date.now() - silentSince;
-            if (silentFor >= SILENCE_DURATION_MS) {
-              console.log('[AudioService] Silence detected after speech (', silentFor, 'ms, dB:', db.toFixed(1), ')');
-              this.fireSilenceCallback();
-            }
-          } else {
-            silentSince = 0;
-          }
+        } else {
+          // Native: expo-av metering
+          const status = await this.recording.getStatusAsync();
+          if (!status.isRecording) return;
+          const rawDb = status.metering ?? -160;
+          // If metering returns -160 (no data), ignore — fallback timer handles it
+          if (rawDb <= METERING_NO_DATA_DB) return;
+          db = rawDb;
         }
-        // Phase 2b: Metering broken — fallback timer handles it (set above)
-        // Nothing to do here, the setTimeout in Phase 1 will fire
+
+        // ── Metering returned a real value ──
+
+        // Voice detection
+        if (db >= VOICE_DETECTED_DB) {
+          if (!this.voiceDetected) {
+            logger.log('[AudioService] Voice detected (dB:', db.toFixed(1), ')');
+            // Voice detected! Cancel the fallback timer — metering is working,
+            // we'll now wait for silence after speech instead.
+            if (fallbackScheduled && this.silenceTimer) {
+              clearTimeout(this.silenceTimer);
+              this.silenceTimer = null;
+              fallbackScheduled = false;
+              logger.log('[AudioService] Fallback timer cancelled — metering working');
+              // Schedule a new, longer fallback in case silence is never detected
+              this.silenceTimer = setTimeout(() => {
+                if (this.silenceCallbackFired) return;
+                logger.log('[AudioService] Extended fallback: voice detected but silence never came');
+                this.fireSilenceCallback();
+              }, HARD_MAX_RECORDING_MS - elapsed);
+            }
+          }
+          this.voiceDetected = true;
+          silentSince = 0;
+          return;
+        }
+
+        // Silence detection (only after voice was detected via metering)
+        if (!this.voiceDetected) return;
+
+        if (db < SILENCE_THRESHOLD_DB) {
+          if (silentSince === 0) silentSince = Date.now();
+          const silentFor = Date.now() - silentSince;
+          if (silentFor >= SILENCE_DURATION_MS) {
+            logger.log('[AudioService] Silence detected after speech (', silentFor, 'ms, dB:', db.toFixed(1), ')');
+            this.fireSilenceCallback();
+          }
+        } else {
+          silentSince = 0;
+        }
       } catch {
         // recording may have ended
       }
@@ -407,19 +482,31 @@ export class AudioService {
   }
 
   /**
-   * Stop recording and send the audio to Whisper STT.
+   * Stop recording and return transcribed text.
+   *
+   * On WEB: Returns the transcript already captured by SpeechRecognition (no API call).
+   * On NATIVE: Stops expo-av recording and sends audio to Pollinations STT.
    */
   async stopRecordingAndTranscribe(language?: string): Promise<string> {
+    // ── WEB: Return stored SpeechRecognition transcript ──
+    if (isWeb) {
+      this.stopWebSpeechRecognition();
+      const transcript = this.webSpeechTranscript.trim();
+      logger.log('[AudioService] Web STT final transcript:', transcript.substring(0, 80) || '(empty)');
+      this.webSpeechTranscript = '';
+      return transcript;
+    }
+
+    // ── NATIVE: Stop expo-av recording and transcribe via API ──
     this.stopSilenceDetection();
     this.clearMaxRecordingTimer();
-    this.cleanupWebAudio();
 
     if (!this.recording) {
       throw new Error('No active recording');
     }
 
     try {
-      console.log('[AudioService] Stopping recording...');
+      logger.log('[AudioService] Stopping native recording...');
       await this.recording.stopAndUnloadAsync();
       const uri = this.recording.getURI();
       this.recording = null;
@@ -429,45 +516,33 @@ export class AudioService {
       }
 
       const recordDuration = Date.now() - this.recordingStartTime;
-      console.log('[AudioService] Recording saved, duration:', recordDuration, 'ms, uri:', uri.substring(0, 50));
+      logger.log('[AudioService] Recording saved, duration:', recordDuration, 'ms');
 
-      // Skip transcription for very short recordings (likely no speech)
       if (recordDuration < 500) {
-        console.log('[AudioService] Recording too short, skipping transcription');
+        logger.log('[AudioService] Recording too short, skipping transcription');
         return '';
       }
 
-      let transcription: string;
-
-      if (isWeb) {
-        const response = await fetch(uri);
-        const audioBlob = await response.blob();
-        console.log('[AudioService] Web audio blob size:', audioBlob.size);
-        if (audioBlob.size < 1000) {
-          console.log('[AudioService] Audio blob too small, likely silence');
-          return '';
-        }
-        transcription = await voiceAIService.transcribeAudioBlob(audioBlob, 'recording.webm', language);
-      } else {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-        });
-        transcription = await voiceAIService.transcribeFileUri(uri, 'audio/wav', 'recording.wav', language);
-      }
-
-      return transcription;
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+      return await voiceAIService.transcribeFileUri(uri, 'audio/wav', 'recording.wav', language);
     } catch (err: any) {
       this.recording = null;
-      console.error('[AudioService] Transcription pipeline error:', err);
+      logger.error('[AudioService] Transcription pipeline error:', err);
       throw new Error(err?.message ?? 'Failed to process voice input');
     }
   }
 
   async cancelRecording(): Promise<void> {
+    if (isWeb) {
+      this.stopWebSpeechRecognition();
+      this.webSpeechTranscript = '';
+      return;
+    }
     this.stopSilenceDetection();
     this.clearMaxRecordingTimer();
-    this.cleanupWebAudio();
     if (this.recording) {
       try {
         await this.recording.stopAndUnloadAsync();
@@ -533,7 +608,7 @@ export class AudioService {
     try {
       await this.stopPlaybackAsync();
       this.isSpeaking = true;
-      console.log('[AudioService] Speaking (', this.detectedLang, '):', text.substring(0, 60));
+      logger.log('[AudioService] Speaking (', this.detectedLang, '):', text.substring(0, 60));
 
       if (!isWeb) {
         await this.playTTSNative(text, voice);
@@ -541,7 +616,7 @@ export class AudioService {
         await this.playTTSWeb(text, voice);
       }
     } catch (err) {
-      console.error('[AudioService] TTS error:', err);
+      logger.error('[AudioService] TTS error:', err);
       this.isSpeaking = false;
     }
   }
@@ -556,33 +631,11 @@ export class AudioService {
   }
 
   /**
-   * Web TTS: use blob URLs via POST/GET, fallback to expo-speech (SpeechSynthesis).
+   * Web TTS: use browser SpeechSynthesis directly (via expo-speech).
+   * Pollinations free tier has no audio model, so we skip API TTS entirely.
+   * This gives zero-latency speech with no network dependency.
    */
   private async playTTSWeb(text: string, voice: string): Promise<void> {
-    // Try Pollinations POST TTS (blob URL)
-    try {
-      const audioUrl = await voiceAIService.generateTtsAudioUrl(text, voice);
-      await this.playWebAudio(audioUrl);
-      console.log('[AudioService] Web TTS POST playback finished');
-      this.isSpeaking = false;
-      return;
-    } catch (postErr) {
-      console.warn('[AudioService] Web TTS POST failed:', postErr);
-    }
-
-    // Try Pollinations GET TTS (blob URL)
-    try {
-      const audioUrl = await voiceAIService.generateTtsAudioUrlGet(text, voice);
-      await this.playWebAudio(audioUrl);
-      console.log('[AudioService] Web TTS GET playback finished');
-      this.isSpeaking = false;
-      return;
-    } catch (getErr) {
-      console.warn('[AudioService] Web TTS GET also failed:', getErr);
-    }
-
-    // Final fallback: expo-speech (SpeechSynthesis on web)
-    console.log('[AudioService] Web TTS: all endpoints failed, using expo-speech');
     await this.speakWithExpoSpeech(text);
   }
 
@@ -626,43 +679,136 @@ export class AudioService {
     }
   }
 
+  // Cache the selected female voice identifier (web only)
+  private _femaleVoice: string | null = null;
+  private _voiceSearchDone = false;
+
+  /**
+   * Find a female voice from the browser's SpeechSynthesis voices.
+   * Prefers voices with "female" in the name, or well-known female voices.
+   */
+  private findFemaleVoice(lang: string): string | null {
+    if (!isWeb || typeof window === 'undefined') return null;
+    if (this._voiceSearchDone) return this._femaleVoice;
+    try {
+      const synth = window.speechSynthesis;
+      const voices = synth.getVoices();
+      if (voices.length === 0) return null; // voices not loaded yet
+      this._voiceSearchDone = true;
+
+      const langPrefix = lang.split('-')[0].toLowerCase();
+
+      // Prefer: female keyword, then known female voice names
+      const femaleKeywords = ['female', 'woman', 'girl', 'zira', 'samantha', 'karen', 'fiona', 'moira', 'tessa', 'victoria', 'susan', 'hazel', 'catherine'];
+      const langVoices = voices.filter(v => v.lang.toLowerCase().startsWith(langPrefix));
+      const allCandidates = langVoices.length > 0 ? langVoices : voices;
+
+      for (const v of allCandidates) {
+        const name = v.name.toLowerCase();
+        if (femaleKeywords.some(kw => name.includes(kw))) {
+          logger.log('[AudioService] Selected female voice:', v.name, v.lang);
+          this._femaleVoice = v.name;
+          return v.name;
+        }
+      }
+      // Fallback: pick first voice for the language (many defaults are female)
+      if (langVoices.length > 0) {
+        this._femaleVoice = langVoices[0].name;
+        logger.log('[AudioService] Using first lang voice:', langVoices[0].name);
+        return this._femaleVoice;
+      }
+    } catch (err) {
+      logger.warn('[AudioService] Voice search error:', err);
+    }
+    return null;
+  }
+
+  /**
+   * Split text into sentence-sized chunks for reliable TTS playback.
+   * Browser SpeechSynthesis often cuts off text longer than ~200 chars.
+   */
+  private splitTextForTTS(text: string): string[] {
+    // Split on sentence boundaries
+    const sentences = text.match(/[^.!?]+[.!?]+[\s]*/g);
+    if (!sentences) return [text];
+
+    const MAX_CHUNK = 180;
+    const chunks: string[] = [];
+    let current = '';
+
+    for (const sentence of sentences) {
+      if ((current + sentence).length > MAX_CHUNK && current.length > 0) {
+        chunks.push(current.trim());
+        current = sentence;
+      } else {
+        current += sentence;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
+
+    // If no sentence boundaries were found, just return the original
+    return chunks.length > 0 ? chunks : [text];
+  }
+
   /**
    * Speak with expo-speech — primary TTS engine on native.
    * Reliable, no network latency, supports all languages.
+   * Uses a female voice, splits long text into chunks to prevent cutoff.
    */
-  private speakWithExpoSpeech(text: string): Promise<void> {
+  private async speakWithExpoSpeech(text: string): Promise<void> {
+    const chunks = this.splitTextForTTS(text);
+    const lang = this.detectedLang === 'ar' ? 'ar-SA' : this.ttsLanguage;
+    logger.log('[AudioService] expo-speech speaking, lang:', lang, 'chunks:', chunks.length, 'text:', text.substring(0, 60));
+
+    // Find female voice on web
+    const voiceName = this.findFemaleVoice(lang);
+
+    for (const chunk of chunks) {
+      if (!this.isSpeaking) break; // Stopped externally
+      await this.speakChunk(chunk, lang, voiceName);
+    }
+    this.isSpeaking = false;
+  }
+
+  /**
+   * Speak a single chunk of text. Returns a promise that resolves when done.
+   */
+  private speakChunk(text: string, lang: string, voiceName: string | null): Promise<void> {
     return new Promise<void>((resolve) => {
       let resolved = false;
       const done = () => {
         if (resolved) return;
         resolved = true;
-        this.isSpeaking = false;
         resolve();
       };
       try {
-        const lang = this.detectedLang === 'ar' ? 'ar-SA' : this.ttsLanguage;
-        console.log('[AudioService] expo-speech speaking, lang:', lang, 'text:', text.substring(0, 40));
-        Speech.speak(text, {
+        const options: Record<string, any> = {
           language: lang,
           rate: this.detectedLang === 'ar' ? 0.9 : 1.0,
-          pitch: 1.0,
+          pitch: 1.1, // Slightly higher pitch for feminine voice
           onDone: done,
           onStopped: done,
-          onError: (err) => {
-            console.warn('[AudioService] expo-speech error:', err);
+          onError: (err: any) => {
+            logger.warn('[AudioService] expo-speech chunk error:', err);
             done();
           },
-        });
-        // Safety timeout — never block the conversation loop
+        };
+        // Set voice on web if we found a female one
+        if (voiceName && isWeb) {
+          options.voice = voiceName;
+        }
+        Speech.speak(text, options);
+        // Scale timeout by text length: ~80ms per character + 3s base
+        const timeoutMs = Math.max(8000, 3000 + text.length * 80);
         setTimeout(() => {
           if (!resolved) {
-            console.warn('[AudioService] expo-speech timeout after 10s, resolving');
+            logger.warn('[AudioService] expo-speech chunk timeout after', timeoutMs, 'ms');
             Speech.stop();
             done();
           }
-        }, 10000);
+        }, timeoutMs);
       } catch (err) {
-        console.warn('[AudioService] expo-speech threw:', err);
+        logger.warn('[AudioService] expo-speech chunk threw:', err);
         done();
       }
     });

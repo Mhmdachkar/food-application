@@ -14,6 +14,7 @@ import type {
   ModifierOption,
   NutritionInfo,
 } from '../models/MenuItem';
+import { logger } from '../utils/logger';
 
 export interface MenuServiceState {
   menuItems: MenuItem[];
@@ -57,13 +58,13 @@ export class MenuService {
         .order('sort_order')
         .returns<DBCategory[]>();
       if (error || !data) {
-        console.warn('[MENU] Failed to fetch categories:', error?.message);
+        logger.warn('[MENU] Failed to fetch categories:', error?.message);
         return;
       }
-      console.log('[MENU] Fetched', data.length, 'categories');
+      logger.log('[MENU] Fetched', data.length, 'categories');
       this.state.categories = data;
     } catch (e: any) {
-      console.error('[MENU] Exception fetching categories:', e?.message);
+      logger.error('[MENU] Exception fetching categories:', e?.message);
     }
   }
 
@@ -77,12 +78,12 @@ export class MenuService {
         .select('*')
         .returns<DBMenuItem[]>();
       if (itemsErr || !dbItems) {
-        console.warn('[MENU] Failed to fetch menu items:', itemsErr?.message);
+        logger.warn('[MENU] Failed to fetch menu items:', itemsErr?.message);
         this.state.errorMessage = itemsErr?.message ?? 'Failed to load menu';
         this.state.isLoading = false;
         return;
       }
-      console.log('[MENU] Fetched', dbItems.length, 'menu items');
+      logger.log('[MENU] Fetched', dbItems.length, 'menu items');
 
       const { data: dbGroups } = await this.client
         .from('modifier_groups')
@@ -179,7 +180,7 @@ export class MenuService {
         return { ...menuItem, modifierGroups };
       });
     } catch (e: any) {
-      console.error('[MENU] Exception in fetchMenuItems:', e?.message, e);
+      logger.error('[MENU] Exception in fetchMenuItems:', e?.message, e);
       this.state.errorMessage = e?.message ?? 'Failed to load menu';
     } finally {
       this.state.isLoading = false;

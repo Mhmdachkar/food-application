@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,109 +6,32 @@ import {
   StyleSheet,
   Pressable,
   Animated,
-  Easing,
-  Image,
   ScrollView,
-  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useDataStore } from '../../state/DataStore';
 import { useCartStore } from '../../state/CartStore';
 import { useAuthStore } from '../../state/AuthStore';
 import { useRecentlyViewed } from '../../providers/RecentlyViewedProvider';
-import { colors } from '../../theme/theme';
+import { colors, spacing, radii, shadows } from '../../theme/theme';
 import type { MenuItem } from '../../models/MenuItem';
-import { DeliveryBanner } from '../../components/DeliveryBanner';
-import { LiveActivityBanner } from '../../components/LiveActivityBanner';
+import { CAT_EMOJI } from '../../constants/categories';
+import { FoodCard } from '../../components/FoodCard';
 import { FlashDealCard } from '../../components/FlashDealCard';
 import { QuickReorderCard } from '../../components/QuickReorderCard';
 import { TopPicksCard } from '../../components/TopPicksCard';
 import { RecentlyViewedRow } from '../../components/RecentlyViewedRow';
-import { PopularNowBadge } from '../../components/PopularNowBadge';
+import { SearchBar } from '../../components/SearchBar';
 import { buildFlashDeals, popularNowItems } from '../../mocks/deals';
 
-const { width: SW } = Dimensions.get('window');
-
-const CAT_EMOJI: Record<string, string> = {
-  burgers: '\uD83C\uDF54', pizza: '\uD83C\uDF55', sushi: '\uD83C\uDF63',
-  salads: '\uD83E\uDD57', pasta: '\uD83C\uDF5D', chicken: '\uD83C\uDF57',
-  seafood: '\uD83E\uDD90', desserts: '\uD83C\uDF70', drinks: '\uD83E\uDD64',
-  sides: '\uD83C\uDF5F', breakfast: '\uD83E\uDD5E', bowls: '\uD83C\uDF5C',
-};
-
-const MOOD_CHIPS = [
-  { icon: '\uD83D\uDD25', label: 'Trending', filter: 'popular' },
-  { icon: '\uD83E\uDDC1', label: 'Healthy', filter: 'healthy' },
-  { icon: '\uD83C\uDF36\uFE0F', label: 'Spicy', filter: 'spicy' },
-  { icon: '\uD83E\uDDC0', label: 'Comfort', filter: 'classic' },
-  { icon: '\uD83C\uDF31', label: 'Vegan', filter: 'vegan' },
-  { icon: '\u2728', label: 'Premium', filter: 'premium' },
+const QUICK_ACTIONS = [
+  { icon: 'mic-outline' as const, label: 'Voice Order', route: '/voice/call', color: '#845EF7' },
+  { icon: 'heart-outline' as const, label: 'Favorites', route: '/customer/favorites', color: '#FF4757' },
+  { icon: 'repeat-outline' as const, label: 'Reorder', route: '/customer/reorder', color: '#20C997' },
+  { icon: 'gift-outline' as const, label: 'Rewards', route: '/customer/loyalty', color: '#FF922B' },
 ];
-
-const FEATURE_CARDS = [
-  { icon: '\uD83E\uDDE0', title: 'AI Assistant', desc: 'Get personalized picks', route: '/voice/call', bg: '#845EF7' },
-  { icon: '\uD83C\uDF99\uFE0F', title: 'Voice Order', desc: 'Talk to order food', route: '/voice/call', bg: '#20C997' },
-  { icon: '\uD83D\uDD01', title: 'Reorder', desc: 'Your favorites, fast', route: '/customer/reorder', bg: '#F06595' },
-  { icon: '\uD83D\uDC65', title: 'Group Order', desc: 'Order with friends', route: '/customer/group', bg: '#339AF0' },
-  { icon: '\uD83D\uDCC5', title: 'Schedule', desc: 'Pre-order meals', route: '/customer/schedule', bg: '#FF922B' },
-  { icon: '\uD83C\uDFC6', title: 'Rewards', desc: 'Points & streaks', route: '/customer/loyalty', bg: '#FFD43B' },
-  { icon: '\uD83D\uDEE1\uFE0F', title: 'Diet Profile', desc: 'Allergen safety', route: '/customer/dietary', bg: '#51CF66' },
-];
-
-/* ──── Horizontal Food Card ──── */
-const FoodCard: React.FC<{
-  item: MenuItem; index: number; onAdd: (item: MenuItem) => void;
-}> = ({ item, index, onAdd }) => {
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, friction: 6, tension: 50, delay: index * 60, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 400, delay: index * 60, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  const emoji = CAT_EMOJI[item.category] ?? '\uD83C\uDF7D\uFE0F';
-
-  return (
-    <Animated.View style={[s.foodCard, { opacity, transform: [{ scale }] }]}>
-      {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={s.foodImg} />
-      ) : (
-        <View style={s.foodImgPlaceholder}>
-          <Text style={{ fontSize: 38 }}>{emoji}</Text>
-        </View>
-      )}
-      <View style={s.foodInfo}>
-        <View style={s.foodTagRow}>
-          {item.tags.slice(0, 2).map((t, i) => (
-            <View key={i} style={s.foodTag}><Text style={s.foodTagText}>{t}</Text></View>
-          ))}
-        </View>
-        <Text style={s.foodName} numberOfLines={1}>{item.name}</Text>
-        <Text style={s.foodDesc} numberOfLines={2}>{item.description}</Text>
-        <View style={s.foodBottom}>
-          <View>
-            <Text style={s.foodPrice}>${item.price.toFixed(2)}</Text>
-            <View style={s.foodMeta}>
-              <Text style={s.foodMetaText}>{'\u2B50'} {item.rating.toFixed(1)}</Text>
-              <Text style={s.foodMetaDot}>{'\u00B7'}</Text>
-              <Text style={s.foodMetaText}>{item.prepTimeMinutes}min</Text>
-            </View>
-          </View>
-          <Pressable
-            style={({ pressed }) => [s.addBtn, pressed && { transform: [{ scale: 0.92 }] }]}
-            onPress={() => onAdd(item)}
-          >
-            <Text style={s.addBtnText}>+</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Animated.View>
-  );
-};
 
 /* ──── Main Screen ──── */
 export const CustomerHomeScreen: React.FC = () => {
@@ -118,33 +41,23 @@ export const CustomerHomeScreen: React.FC = () => {
   const { menuItems, loadFromSupabase, orders } = useDataStore();
   const { addItem, itemCount, total } = useCartStore();
   const { recentItems } = useRecentlyViewed();
-  const [activeMood, setActiveMood] = useState<string | null>(null);
 
-  const headerScale = useRef(new Animated.Value(0.95)).current;
   const headerOp = useRef(new Animated.Value(0)).current;
-  const bannerSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
     if (user && role) loadFromSupabase(user.id, role);
   }, [user, role, loadFromSupabase]);
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.parallel([
-        Animated.spring(headerScale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }),
-        Animated.timing(headerOp, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ]),
-      Animated.timing(bannerSlide, { toValue: 0, duration: 500, easing: Easing.out(Easing.exp), useNativeDriver: true }),
-    ]).start();
+    Animated.timing(headerOp, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
 
-  const filteredItems = useMemo(() => {
-    const available = menuItems.filter(i => i.isAvailable);
-    if (!activeMood) return available.sort((a, b) => b.rating - a.rating).slice(0, 10);
-    return available.filter(i => i.tags.some(t => t.toLowerCase().includes(activeMood))).slice(0, 10);
-  }, [menuItems, activeMood]);
+  const topRated = useMemo(
+    () => menuItems.filter(i => i.isAvailable).sort((a, b) => b.rating - a.rating).slice(0, 10),
+    [menuItems],
+  );
 
-  const trendingCategories = useMemo(() => {
+  const categories = useMemo(() => {
     const cats = [...new Set(menuItems.filter(i => i.isAvailable).map(i => i.category))];
     return cats.slice(0, 8);
   }, [menuItems]);
@@ -154,19 +67,13 @@ export const CustomerHomeScreen: React.FC = () => {
     [orders],
   );
 
-  const lastDelivered = useMemo(
-    () => orders.find(o => o.status === 'DELIVERED'),
-    [orders],
-  );
-
+  const lastDelivered = useMemo(() => orders.find(o => o.status === 'DELIVERED'), [orders]);
   const flashDeals = useMemo(() => buildFlashDeals(menuItems), [menuItems]);
 
-  const topPicks = useMemo(() => {
-    return menuItems
-      .filter(i => i.isAvailable && i.rating >= 4.6)
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 5);
-  }, [menuItems]);
+  const topPicks = useMemo(
+    () => menuItems.filter(i => i.isAvailable && i.rating >= 4.6).sort((a, b) => b.rating - a.rating).slice(0, 5),
+    [menuItems],
+  );
 
   const popularNowMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -174,104 +81,95 @@ export const CustomerHomeScreen: React.FC = () => {
     return map;
   }, []);
 
-  const firstName = user?.name?.split(' ')[0] ?? '';
-  const h = new Date().getHours();
-  const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const count = itemCount();
+  const goToItem = (item: MenuItem) => router.push(`/customer/menu-item/${item.id}` as any);
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
       <FlatList
-        data={filteredItems}
+        data={topRated}
         keyExtractor={item => item.id}
-        renderItem={({ item, index }) => {
-          const popCount = popularNowMap.get(item.id);
-          return (
-            <View>
-              {popCount != null && <PopularNowBadge ordersInLastHour={popCount} />}
-              <FoodCard item={item} index={index} onAdd={i => addItem(i, 1)} />
-            </View>
-          );
-        }}
-        contentContainerStyle={[s.listContent, { paddingBottom: count > 0 ? 100 : 30 }]}
+        numColumns={2}
+        columnWrapperStyle={s.foodRow}
+        renderItem={({ item, index }) => (
+          <FoodCard item={item} index={index} onAdd={i => addItem(i, 1)} onPress={goToItem} />
+        )}
+        contentContainerStyle={[s.listContent, { paddingBottom: count > 0 ? 110 : 40 }]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <>
-            {/* ── Greeting ── */}
-            <Animated.View style={[s.greetingSection, { opacity: headerOp, transform: [{ scale: headerScale }] }]}>
-              <View style={s.greetingRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.greetingText}>{greeting}{firstName ? `, ${firstName}` : ''}</Text>
-                  <Text style={s.greetingSub}>What are you craving today?</Text>
+          <Animated.View style={{ opacity: headerOp }}>
+            {/* ── Header: Location + Icons ── */}
+            <View style={s.headerBar}>
+              <Pressable style={s.locationBtn} onPress={() => router.push('/customer/addresses' as any)}>
+                <Ionicons name="location" size={18} color={colors.accent} />
+                <View style={s.locationText}>
+                  <Text style={s.locationLabel}>Deliver to</Text>
+                  <Text style={s.locationAddress} numberOfLines={1}>123 Main Street</Text>
                 </View>
-                <Pressable style={s.avatarBtn} onPress={() => router.push('/customer/profile' as any)}>
-                  <Text style={s.avatarText}>{firstName?.charAt(0) || 'U'}</Text>
-                </Pressable>
-              </View>
-            </Animated.View>
+                <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+              </Pressable>
+              <Pressable style={s.iconBtn} onPress={() => router.push('/customer/notifications' as any)}>
+                <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
+              </Pressable>
+            </View>
 
-            {/* ── Delivery Banner ── */}
-            <DeliveryBanner onPress={() => console.log('[Home] Address change tapped')} />
-
-            {/* ── Live Activity Banner ── */}
-            <LiveActivityBanner />
+            {/* ── Search ── */}
+            <SearchBar menuItems={menuItems} onSelectItem={goToItem} />
 
             {/* ── Active Order Tracker ── */}
             {activeOrders.length > 0 && (
-              <Animated.View style={{ transform: [{ translateY: bannerSlide }] }}>
-                <Pressable
-                  style={s.liveOrderCard}
-                  onPress={() => router.push('/customer/orders' as any)}
-                >
-                  <View style={s.liveOrderPulse} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.liveOrderTitle}>{'\uD83D\uDCE6'} Live Order</Text>
-                    <Text style={s.liveOrderStatus}>
-                      {activeOrders[0].status.replace(/_/g, ' ')} {'\u00B7'} {activeOrders[0].items.length} item{activeOrders[0].items.length !== 1 ? 's' : ''}
-                    </Text>
-                  </View>
-                  <Text style={s.liveOrderArrow}>{'\u203A'}</Text>
-                </Pressable>
-              </Animated.View>
+              <Pressable style={s.liveOrderCard} onPress={() => router.push('/customer/orders' as any)}>
+                <View style={s.liveOrderDot} />
+                <View style={s.liveOrderContent}>
+                  <Text style={s.liveOrderTitle}>Order in progress</Text>
+                  <Text style={s.liveOrderSub}>
+                    {activeOrders[0].status.replace(/_/g, ' ')} {'\u00B7'} {activeOrders[0].items.length} item{activeOrders[0].items.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.success} />
+              </Pressable>
             )}
 
-            {/* ── Feature Cards (AI + Voice) ── */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.featureRow}>
-              {FEATURE_CARDS.map(f => (
-                <Pressable
-                  key={f.title}
-                  style={({ pressed }) => [s.featureCard, { backgroundColor: f.bg }, pressed && { opacity: 0.85 }]}
-                  onPress={() => router.push(f.route as any)}
-                >
-                  <Text style={s.featureIcon}>{f.icon}</Text>
-                  <Text style={s.featureTitle}>{f.title}</Text>
-                  <Text style={s.featureDesc}>{f.desc}</Text>
+            {/* ── Categories Grid ── */}
+            <View style={s.catGrid}>
+              {categories.map(cat => (
+                <Pressable key={cat} style={s.catItem} onPress={() => router.push('/customer/categories' as any)}>
+                  <View style={s.catIconWrap}>
+                    <Text style={s.catEmoji}>{CAT_EMOJI[cat] ?? '\uD83C\uDF7D\uFE0F'}</Text>
+                  </View>
+                  <Text style={s.catName}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</Text>
                 </Pressable>
               ))}
-              <Pressable
-                style={({ pressed }) => [s.featureCard, { backgroundColor: colors.accent }, pressed && { opacity: 0.85 }]}
-                onPress={() => router.push('/customer/categories' as any)}
-              >
-                <Text style={s.featureIcon}>{'\uD83C\uDF54'}</Text>
-                <Text style={s.featureTitle}>Full Menu</Text>
-                <Text style={s.featureDesc}>Browse all items</Text>
-              </Pressable>
+            </View>
+
+            {/* ── Quick Actions Row ── */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickRow}>
+              {QUICK_ACTIONS.map(a => (
+                <Pressable
+                  key={a.label}
+                  style={({ pressed }) => [s.quickAction, pressed && s.pressed]}
+                  onPress={() => router.push(a.route as any)}
+                >
+                  <View style={[s.quickIconWrap, { backgroundColor: a.color + '15' }]}>
+                    <Ionicons name={a.icon} size={20} color={a.color} />
+                  </View>
+                  <Text style={s.quickLabel}>{a.label}</Text>
+                </Pressable>
+              ))}
             </ScrollView>
 
             {/* ── Flash Deals ── */}
             {flashDeals.length > 0 && (
               <>
                 <View style={s.sectionRow}>
-                  <Text style={s.sectionTitle}>{'\u26A1'} Flash Deals</Text>
+                  <Text style={s.sectionTitle}>Flash Deals</Text>
+                  <View style={s.dealBadge}>
+                    <Ionicons name="flash" size={12} color={colors.accent} />
+                    <Text style={s.dealBadgeText}>Limited</Text>
+                  </View>
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.flashDealRow}>
-                  {flashDeals.map(deal => (
-                    <FlashDealCard
-                      key={deal.id}
-                      deal={deal}
-                      onAdd={d => addItem(d.food, 1)}
-                    />
-                  ))}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollRow}>
+                  {flashDeals.map(deal => <FlashDealCard key={deal.id} deal={deal} onAdd={d => addItem(d.food, 1)} />)}
                 </ScrollView>
               </>
             )}
@@ -279,8 +177,7 @@ export const CustomerHomeScreen: React.FC = () => {
             {/* ── Quick Reorder ── */}
             {lastDelivered && (
               <>
-                <Text style={s.sectionTitle}>{'\uD83D\uDD01'} Order Again</Text>
-                <View style={{ height: 8 }} />
+                <View style={s.sectionRow}><Text style={s.sectionTitle}>Order Again</Text></View>
                 <QuickReorderCard
                   order={lastDelivered}
                   onReorder={o => {
@@ -291,77 +188,34 @@ export const CustomerHomeScreen: React.FC = () => {
               </>
             )}
 
-            {/* ── Top Picks Today ── */}
+            {/* ── Top Picks ── */}
             {topPicks.length > 0 && (
               <>
-                <View style={s.sectionRow}>
-                  <Text style={s.sectionTitle}>{'\uD83C\uDFC6'} Top Picks Today</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.topPicksRow}>
+                <View style={s.sectionRow}><Text style={s.sectionTitle}>Top Picks Today</Text></View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hScrollRow}>
                   {topPicks.map(item => (
-                    <TopPicksCard
-                      key={item.id}
-                      item={item}
-                      ordersInLastHour={popularNowMap.get(item.id)}
-                      onPress={i => router.push(`/customer/menu-item/${i.id}` as any)}
-                    />
+                    <TopPicksCard key={item.id} item={item} ordersInLastHour={popularNowMap.get(item.id)} onPress={goToItem} />
                   ))}
                 </ScrollView>
               </>
             )}
 
             {/* ── Recently Viewed ── */}
-            <RecentlyViewedRow
-              items={recentItems}
-              onPress={item => router.push(`/customer/menu-item/${item.id}` as any)}
-            />
+            <RecentlyViewedRow items={recentItems} onPress={goToItem} />
 
-            {/* ── Category Pills ── */}
-            <Text style={s.sectionLabel}>Categories</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.catRow}>
-              {trendingCategories.map(cat => (
-                <Pressable
-                  key={cat}
-                  style={s.catPill}
-                  onPress={() => router.push('/customer/categories' as any)}
-                >
-                  <Text style={s.catEmoji}>{CAT_EMOJI[cat] ?? '\uD83C\uDF7D\uFE0F'}</Text>
-                  <Text style={s.catName}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            {/* ── Mood Chips ── */}
-            <Text style={s.sectionLabel}>Food Mood</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.moodRow}>
-              {MOOD_CHIPS.map(m => {
-                const active = activeMood === m.filter;
-                return (
-                  <Pressable
-                    key={m.filter}
-                    style={[s.moodChip, active && s.moodChipActive]}
-                    onPress={() => setActiveMood(active ? null : m.filter)}
-                  >
-                    <Text style={s.moodIcon}>{m.icon}</Text>
-                    <Text style={[s.moodLabel, active && s.moodLabelActive]}>{m.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* ── Section Header ── */}
+            {/* ── Popular Near You header ── */}
             <View style={s.sectionRow}>
-              <Text style={s.sectionTitle}>{activeMood ? '\uD83C\uDFAF' : '\uD83D\uDD25'} {activeMood ? `${activeMood.charAt(0).toUpperCase() + activeMood.slice(1)} Picks` : 'Top Rated'}</Text>
+              <Text style={s.sectionTitle}>Popular Near You</Text>
               <Pressable onPress={() => router.push('/customer/categories' as any)}>
                 <Text style={s.seeAll}>See all</Text>
               </Pressable>
             </View>
-          </>
+          </Animated.View>
         }
         ListEmptyComponent={
           <View style={s.emptyBox}>
-            <Text style={{ fontSize: 48 }}>{'\uD83C\uDF5C'}</Text>
-            <Text style={s.emptyText}>{activeMood ? 'No items match this mood' : 'Loading delicious options...'}</Text>
+            <Ionicons name="fast-food-outline" size={48} color={colors.textSecondary} />
+            <Text style={s.emptyText}>Loading delicious options...</Text>
           </View>
         }
       />
@@ -369,7 +223,7 @@ export const CustomerHomeScreen: React.FC = () => {
       {/* ── Floating Cart Bar ── */}
       {count > 0 && (
         <Pressable
-          style={({ pressed }) => [s.cartBar, pressed && { opacity: 0.9 }, { bottom: insets.bottom + 10 }]}
+          style={({ pressed }) => [s.cartBar, pressed && s.cartBarPressed, { bottom: insets.bottom + 12 }]}
           onPress={() => router.push('/customer/cart' as any)}
         >
           <View style={s.cartBarLeft}>
@@ -384,131 +238,87 @@ export const CustomerHomeScreen: React.FC = () => {
 };
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFBFE' },
-  listContent: { paddingHorizontal: 20, paddingTop: 8 },
+  container: { flex: 1, backgroundColor: colors.background },
+  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
+  foodRow: { justifyContent: 'space-between' },
+  pressed: { opacity: 0.7 },
 
-  /* Greeting */
-  greetingSection: { marginBottom: 16 },
-  greetingRow: { flexDirection: 'row', alignItems: 'center' },
-  greetingText: { fontSize: 26, fontWeight: '900', color: colors.textPrimary, letterSpacing: -0.5 },
-  greetingSub: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
-  avatarBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-    shadowColor: colors.accent, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4,
+  /* Header */
+  headerBar: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs, paddingVertical: spacing.sm },
+  locationBtn: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  locationText: { flex: 1, marginLeft: spacing.sm },
+  locationLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
+  locationAddress: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+  iconBtn: {
+    width: 40, height: 40, borderRadius: radii.round,
+    backgroundColor: colors.cardBackground, alignItems: 'center', justifyContent: 'center',
+    ...shadows.sm,
   },
-  avatarText: { fontSize: 18, fontWeight: '800', color: '#FFF' },
 
   /* Live Order */
   liveOrderCard: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#EEF8F0', borderRadius: 16, padding: 14,
-    marginBottom: 16, borderWidth: 1, borderColor: '#D0F0D8',
+    backgroundColor: colors.successLight, borderRadius: radii.small, padding: spacing.sm + 4,
+    marginBottom: 14, marginTop: spacing.xs,
   },
-  liveOrderPulse: {
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: colors.success, marginRight: 12,
-  },
-  liveOrderTitle: { fontSize: 14, fontWeight: '800', color: colors.textPrimary },
-  liveOrderStatus: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  liveOrderArrow: { fontSize: 24, color: colors.success, fontWeight: '300' },
+  liveOrderDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success, marginRight: 10 },
+  liveOrderContent: { flex: 1 },
+  liveOrderTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  liveOrderSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 
-  /* Feature Cards */
-  featureRow: { gap: 10, paddingBottom: 16 },
-  featureCard: {
-    width: SW * 0.38, borderRadius: 20, padding: 16,
-    shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4,
+  /* Categories Grid */
+  catGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md, marginTop: spacing.sm,
   },
-  featureIcon: { fontSize: 28, marginBottom: 8 },
-  featureTitle: { fontSize: 15, fontWeight: '800', color: '#FFF' },
-  featureDesc: { fontSize: 11, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-
-  /* Categories */
-  catRow: { gap: 10, paddingBottom: 16 },
-  catPill: {
-    alignItems: 'center', backgroundColor: '#FFF', borderRadius: 16,
-    paddingVertical: 12, paddingHorizontal: 16,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2,
-    borderWidth: 1, borderColor: '#F0F0F5',
+  catItem: { width: '24%', alignItems: 'center', marginBottom: spacing.sm + 4 },
+  catIconWrap: {
+    width: 52, height: 52, borderRadius: radii.medium,
+    backgroundColor: colors.cardBackground,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadows.sm,
   },
-  catEmoji: { fontSize: 24, marginBottom: 4 },
-  catName: { fontSize: 11, fontWeight: '700', color: colors.textPrimary },
+  catEmoji: { fontSize: 24 },
+  catName: { fontSize: 11, fontWeight: '600', color: colors.textPrimary, marginTop: 6, textAlign: 'center' },
 
-  /* Mood chips */
-  moodRow: { gap: 8, paddingBottom: 16 },
-  moodChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#FFF', borderRadius: 24,
-    paddingHorizontal: 14, paddingVertical: 9,
-    borderWidth: 1.5, borderColor: '#EDEDF3',
-  },
-  moodChipActive: { borderColor: colors.accent, backgroundColor: colors.accent + '12' },
-  moodIcon: { fontSize: 14 },
-  moodLabel: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-  moodLabelActive: { color: colors.accent },
-
-  /* New Section Rows */
-  flashDealRow: { gap: 12, paddingBottom: 16 },
-  topPicksRow: { gap: 10, paddingBottom: 16 },
+  /* Quick Actions */
+  quickRow: { gap: spacing.sm + 4, paddingBottom: spacing.md },
+  quickAction: { alignItems: 'center', width: 72 },
+  quickIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  quickLabel: { fontSize: 10, fontWeight: '600', color: colors.textSecondary, textAlign: 'center' },
 
   /* Sections */
-  sectionLabel: {
-    fontSize: 12, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10,
-  },
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, marginTop: spacing.sm },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: colors.textPrimary },
-  seeAll: { fontSize: 14, fontWeight: '600', color: colors.accent },
-
-  /* Food Card */
-  foodCard: {
-    backgroundColor: '#FFF', borderRadius: 20, marginBottom: 14,
-    flexDirection: 'row', overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3,
-    borderWidth: 1, borderColor: '#F0F0F5',
+  seeAll: { fontSize: 13, fontWeight: '600', color: colors.accent },
+  hScrollRow: { gap: 10, paddingBottom: 14 },
+  dealBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.warningLight, borderRadius: radii.xs, paddingHorizontal: spacing.sm, paddingVertical: 3, gap: 3,
   },
-  foodImg: { width: 110, height: 120 },
-  foodImgPlaceholder: {
-    width: 110, height: 120, backgroundColor: '#FFF5EB',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  foodInfo: { flex: 1, padding: 12, justifyContent: 'space-between' },
-  foodTagRow: { flexDirection: 'row', gap: 4, marginBottom: 4 },
-  foodTag: { backgroundColor: '#F5F5FA', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  foodTagText: { fontSize: 9, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' },
-  foodName: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },
-  foodDesc: { fontSize: 12, color: colors.textSecondary, lineHeight: 16, marginTop: 2 },
-  foodBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6 },
-  foodPrice: { fontSize: 16, fontWeight: '800', color: colors.textPrimary },
-  foodMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  foodMetaText: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
-  foodMetaDot: { fontSize: 11, color: colors.textSecondary },
-  addBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-    shadowColor: colors.accent, shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3,
-  },
-  addBtnText: { color: '#FFF', fontSize: 20, fontWeight: '600', marginTop: -1 },
+  dealBadgeText: { fontSize: 11, fontWeight: '700', color: colors.accent },
 
   /* Empty */
   emptyBox: { padding: 40, alignItems: 'center' },
-  emptyText: { fontSize: 14, color: colors.textSecondary, marginTop: 8 },
+  emptyText: { fontSize: 14, color: colors.textSecondary, marginTop: 10 },
 
   /* Cart Bar */
   cartBar: {
-    position: 'absolute', left: 20, right: 20,
+    position: 'absolute', left: spacing.md, right: spacing.md,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.accent, paddingHorizontal: 20, paddingVertical: 15,
-    borderRadius: 20,
-    shadowColor: colors.accent, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 5 }, elevation: 8,
+    backgroundColor: colors.accent, paddingHorizontal: 18, paddingVertical: 14,
+    borderRadius: radii.medium,
+    shadowColor: colors.accent, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
+  cartBarPressed: { transform: [{ scale: 0.98 }] },
   cartBarLeft: { flexDirection: 'row', alignItems: 'center' },
   cartBadge: {
-    backgroundColor: '#FFF', width: 26, height: 26, borderRadius: 13,
+    backgroundColor: colors.cardBackground, width: 24, height: 24, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginRight: 10,
   },
-  cartBadgeNum: { fontSize: 13, fontWeight: '900', color: colors.accent },
-  cartBarTitle: { fontSize: 16, fontWeight: '800', color: '#FFF' },
-  cartBarTotal: { fontSize: 16, fontWeight: '800', color: '#FFF' },
+  cartBadgeNum: { fontSize: 12, fontWeight: '900', color: colors.accent },
+  cartBarTitle: { fontSize: 15, fontWeight: '700', color: colors.textInverse },
+  cartBarTotal: { fontSize: 15, fontWeight: '800', color: colors.textInverse },
 });
 

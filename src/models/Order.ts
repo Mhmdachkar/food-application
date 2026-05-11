@@ -6,6 +6,7 @@ export type OrderStatus =
   | 'ACCEPTED'
   | 'PREPARING'
   | 'READY'
+  | 'PICKED_UP'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
   | 'CANCELED';
@@ -21,6 +22,7 @@ export interface Order {
   id: string;
   customerId: string;
   customerName: string;
+  customerPhone?: string | null;
   items: CartItem[];
   status: OrderStatus;
   timeline: OrderTimelineEvent[];
@@ -35,8 +37,17 @@ export interface Order {
   promoDiscount: number;
   driverId?: string | null;
   driverName?: string | null;
+  driverPhone?: string | null;
+  driverAvatarUrl?: string | null;
+  driverRating?: number | null;
   estimatedDeliveryTime?: string | null;
+  estimatedPickupTime?: string | null;
+  actualDeliveryTime?: string | null;
   scheduledFor?: string | null;
+  cancelReason?: string | null;
+  canceledBy?: 'customer' | 'admin' | 'driver' | null;
+  deliveryProofNote?: string | null;
+  deliveryProofPhotoUrl?: string | null;
   createdAt: string; // ISO8601
 }
 

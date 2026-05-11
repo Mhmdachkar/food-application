@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { DBProfile } from '../models/SupabaseModels';
 import type { AppUser } from '../models/AppUser';
 import { mapProfileToAppUser } from '../services/mappers/profileMapper';
+import { logger } from '../utils/logger';
 
 export interface AuthResult {
   user: AppUser | null;
@@ -51,7 +52,7 @@ export class AuthService {
       return { user: null, error: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY in your .env file, or use Quick Login.' };
     }
     try {
-      console.log('[AUTH] Starting signup:', { email, fullName, role });
+      logger.log('[AUTH] Starting signup:', { email, fullName, role });
       
       const { data, error } = await this.client.auth.signUp({
         email,
@@ -64,24 +65,24 @@ export class AuthService {
         },
       });
       
-      console.log('[AUTH] Signup response:', { 
+      logger.log('[AUTH] Signup response:', { 
         userId: data.user?.id, 
         error: error?.message,
         session: !!data.session 
       });
       
       if (error || !data.user) {
-        console.log('[AUTH] Signup failed:', error?.message);
+        logger.log('[AUTH] Signup failed:', error?.message);
         return { user: null, error: error?.message ?? 'Sign up failed' };
       }
       
-      console.log('[AUTH] Fetching profile for:', data.user.id);
+      logger.log('[AUTH] Fetching profile for:', data.user.id);
       const profile = await this.fetchProfile(data.user.id, true);
       
-      console.log('[AUTH] Profile fetched:', profile ? 'Found' : 'Not found');
+      logger.log('[AUTH] Profile fetched:', profile ? 'Found' : 'Not found');
       
       if (!profile) {
-        console.log('[AUTH] Profile not found. Database trigger may not have run.');
+        logger.log('[AUTH] Profile not found. Database trigger may not have run.');
         return { 
           user: null, 
           error: 'Profile not created. Please ensure database migration is complete.' 
@@ -89,11 +90,11 @@ export class AuthService {
       }
       
       const user = mapProfileToAppUser(profile);
-      console.log('[AUTH] User mapped successfully:', user.name, user.role);
+      logger.log('[AUTH] User mapped successfully:', user.name, user.role);
       
       return { user };
     } catch (e: any) {
-      console.error('[AUTH] Exception during signup:', e);
+      logger.error('[AUTH] Exception during signup:', e);
       return { user: null, error: e?.message ?? 'Sign up failed' };
     }
   }
@@ -103,36 +104,36 @@ export class AuthService {
       return { user: null, error: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY in your .env file, or use Quick Login.' };
     }
     try {
-      console.log('[AUTH] Starting sign in:', { email });
+      logger.log('[AUTH] Starting sign in:', { email });
       
       const { data, error } = await this.client.auth.signInWithPassword({
         email,
         password,
       });
       
-      console.log('[AUTH] Sign in response:', { 
+      logger.log('[AUTH] Sign in response:', { 
         userId: data.user?.id, 
         error: error?.message 
       });
       
       if (error || !data.user) {
-        console.log('[AUTH] Sign in failed:', error?.message);
+        logger.log('[AUTH] Sign in failed:', error?.message);
         return { user: null, error: error?.message ?? 'Sign in failed' };
       }
       
       const profile = await this.fetchProfile(data.user.id);
       
       if (!profile) {
-        console.log('[AUTH] Profile not found for existing user');
+        logger.log('[AUTH] Profile not found for existing user');
         return { user: null, error: 'Profile not found. Please contact support.' };
       }
       
       const user = mapProfileToAppUser(profile);
-      console.log('[AUTH] Sign in successful:', user.name, user.role);
+      logger.log('[AUTH] Sign in successful:', user.name, user.role);
       
       return { user };
     } catch (e: any) {
-      console.error('[AUTH] Exception during sign in:', e);
+      logger.error('[AUTH] Exception during sign in:', e);
       return { user: null, error: e?.message ?? 'Sign in failed' };
     }
   }
@@ -142,7 +143,7 @@ export class AuthService {
   }
 
   private async fetchProfile(userId: string, waitForTrigger = false): Promise<DBProfile | null> {
-    console.log('[AUTH] Fetching profile for user:', userId);
+    logger.log('[AUTH] Fetching profile for user:', userId);
     
     // Only delay after sign-up to allow database trigger to complete
     if (waitForTrigger) {
@@ -156,12 +157,12 @@ export class AuthService {
       .maybeSingle<DBProfile>();
     
     if (error) {
-      console.error('[AUTH] Profile fetch error:', error.message);
+      logger.error('[AUTH] Profile fetch error:', error.message);
       return null;
     }
     
     if (!data) {
-      console.log('[AUTH] No profile found for user:', userId);
+      logger.log('[AUTH] No profile found for user:', userId);
     }
     
     return data ?? null;

@@ -10,6 +10,7 @@ import type { CartItem } from '../models/Cart';
 import type { DeliveryAddress } from '../models/AppUser';
 import { eventBus } from './EventBus';
 import type { AppNotification } from '../models/Notification';
+import { logger } from '../utils/logger';
 
 export interface DataState {
   menuItems: MenuItem[];
@@ -43,6 +44,7 @@ export interface DataState {
     assignedBy?: string,
   ) => Promise<void>;
   driverAcceptOrder: (orderId: string, driverId: string) => Promise<void>;
+  updateOrderLocally: (orderId: string, updates: Partial<Order>) => void;
   toggleMenuItemAvailability: (itemId: string) => Promise<void>;
   ordersForCustomer: (customerId: string) => Order[];
   ordersForDriver: (driverId: string) => Order[];
@@ -60,26 +62,26 @@ export const useDataStore = create<DataState>((set, get) => ({
   isLoading: false,
 
   loadFromSupabase: async (userId, role) => {
-    console.log('[DATA] loadFromSupabase called:', { userId, role });
+    logger.log('[DATA] loadFromSupabase called:', { userId, role });
     set({ isLoading: true });
 
     try {
       await menuService.fetchMenuItems();
-      console.log('[DATA] Menu items loaded:', menuService.state.menuItems.length);
+      logger.log('[DATA] Menu items loaded:', menuService.state.menuItems.length);
       if (menuService.state.errorMessage) {
-        console.warn('[DATA] Menu error:', menuService.state.errorMessage);
+        logger.warn('[DATA] Menu error:', menuService.state.errorMessage);
       }
       set({ menuItems: menuService.state.menuItems });
     } catch (e: any) {
-      console.error('[DATA] Menu fetch crashed:', e?.message);
+      logger.error('[DATA] Menu fetch crashed:', e?.message);
     }
 
     try {
       const fetchedOrders = await orderService.fetchOrders(userId, role);
-      console.log('[DATA] Orders loaded:', fetchedOrders.length);
+      logger.log('[DATA] Orders loaded:', fetchedOrders.length);
       set({ orders: fetchedOrders });
     } catch (e: any) {
-      console.error('[DATA] Orders fetch crashed:', e?.message);
+      logger.error('[DATA] Orders fetch crashed:', e?.message);
     }
 
     if (role === 'admin') {
@@ -93,7 +95,7 @@ export const useDataStore = create<DataState>((set, get) => ({
           set({ drivers: allDrivers });
         }
       } catch (e: any) {
-        console.error('[DATA] Drivers fetch crashed:', e?.message);
+        logger.error('[DATA] Drivers fetch crashed:', e?.message);
       }
     }
 
@@ -284,6 +286,14 @@ export const useDataStore = create<DataState>((set, get) => ({
       }));
       eventBus.publish({ type: 'driverAssigned', orderId, driverId });
     }
+  },
+
+  updateOrderLocally: (orderId, updates) => {
+    set(state => ({
+      orders: state.orders.map(o =>
+        o.id === orderId ? { ...o, ...updates } : o,
+      ),
+    }));
   },
 
   toggleMenuItemAvailability: async itemId => {

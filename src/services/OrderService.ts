@@ -10,6 +10,7 @@ import type {
 import type { CartItem } from '../models/Cart';
 import type { DeliveryAddress } from '../models/AppUser';
 import type { Order, OrderStatus, OrderTimelineEvent } from '../models/Order';
+import { logger } from '../utils/logger';
 
 export interface CreateOrderParams {
   p_user_id: string;
@@ -130,7 +131,7 @@ export class OrderService {
 
   async fetchOrders(userId: string, role: 'customer' | 'admin' | 'driver'): Promise<Order[]> {
     try {
-      console.log('[ORDERS] Fetching orders for:', { userId, role });
+      logger.log('[ORDERS] Fetching orders for:', { userId, role });
       let query = this.client.from('orders').select('*').order('created_at', {
         ascending: false,
       });
@@ -142,11 +143,11 @@ export class OrderService {
 
       const { data: dbOrders, error } = await query.returns<DBOrder[]>();
       if (error || !dbOrders) {
-        console.warn('[ORDERS] Failed to fetch orders:', error?.message);
+        logger.warn('[ORDERS] Failed to fetch orders:', error?.message);
         this.errorMessage = error?.message ?? 'Failed to fetch orders';
         return [];
       }
-      console.log('[ORDERS] Fetched', dbOrders.length, 'orders');
+      logger.log('[ORDERS] Fetched', dbOrders.length, 'orders');
 
       const orders: Order[] = [];
       for (const dbOrder of dbOrders) {

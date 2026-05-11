@@ -27,9 +27,9 @@ export const Config: AppConfig = {
   supabaseUrl: getEnv('SUPABASE_URL'),
   supabaseAnonKey: getEnv('SUPABASE_ANON_KEY'),
   pollinationApiKey: getEnv('POLLINATION_API_KEY'),
-  voiceChatUrl: getEnv('VOICE_CHAT_URL', 'https://gen.pollinations.ai/v1/chat/completions'),
-  voiceTtsUrl: getEnv('VOICE_TTS_URL', 'https://gen.pollinations.ai/v1/audio/speech'),
-  voiceSttUrl: getEnv('VOICE_STT_URL', 'https://gen.pollinations.ai/v1/audio/transcriptions'),
+  voiceChatUrl: getEnv('VOICE_CHAT_URL', 'https://text.pollinations.ai/openai/v1/chat/completions'),
+  voiceTtsUrl: getEnv('VOICE_TTS_URL', 'https://text.pollinations.ai/openai'),
+  voiceSttUrl: getEnv('VOICE_STT_URL', 'https://text.pollinations.ai/openai'),
   appEnv: getEnv('APP_ENV', 'development'),
 };
 

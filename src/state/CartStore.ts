@@ -36,6 +36,7 @@ export interface CartState {
   applyPromo: (code: string) => void;
   removePromo: () => void;
   setSelectedTip: (tip: TipOption) => void;
+  setItemNote: (itemName: string, note: string) => boolean;
   clear: () => void;
   clearToast: () => void;
 }
@@ -195,6 +196,21 @@ export const useCartStore = create<CartState>((set, get) => ({
         toastMessage: toast,
       };
     }),
+
+  setItemNote: (itemName, note) => {
+    const items = get().items;
+    const lower = itemName.toLowerCase();
+    const idx = items.findIndex(ci => ci.menuItem.name.toLowerCase().includes(lower) || lower.includes(ci.menuItem.name.toLowerCase()));
+    if (idx < 0) return false;
+    const updated = [...items];
+    const existing = updated[idx].specialInstructions;
+    updated[idx] = {
+      ...updated[idx],
+      specialInstructions: existing ? `${existing}, ${note}` : note,
+    };
+    set({ items: updated });
+    return true;
+  },
 
   clear: () =>
     set({

@@ -15,11 +15,14 @@ import {
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useVoiceCallStore, DEFAULT_QUICK_CHIPS } from '../../state/VoiceCallStore';
 import { useDataStore } from '../../state/DataStore';
 import { useCartStore } from '../../state/CartStore';
 import { colors, spacing, radii } from '../../theme/theme';
 import type { ConversationMessage, QuickChip } from '../../models/VoiceCallTypes';
+import { logger } from '../../utils/logger';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -336,6 +339,7 @@ const bubbleStyles = StyleSheet.create({
 
 export const VoiceCallScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { menuItems, refreshMenu, isLoading: dataLoading } = useDataStore();
   const {
     messages,
@@ -372,7 +376,7 @@ export const VoiceCallScreen: React.FC = () => {
   // Log every state transition for on-device debugging
   useEffect(() => {
     const entry = `[${new Date().toLocaleTimeString()}] ${callState} rec=${isRecording} live=${isLiveMode} mute=${isMuted}`;
-    console.log('[VoiceCallScreen]', entry);
+    logger.log('[VoiceCallScreen]', entry);
     setDebugLog(prev => [...prev.slice(-15), entry]);
   }, [callState, isRecording, isLiveMode, isMuted]);
 
@@ -381,12 +385,12 @@ export const VoiceCallScreen: React.FC = () => {
     try {
       let items = menuItems;
       if (items.length === 0) {
-        console.log('[VoiceCallScreen] Menu empty, refreshing...');
+        logger.log('[VoiceCallScreen] Menu empty, refreshing...');
         await refreshMenu();
         items = useDataStore.getState().menuItems;
       }
       if (items.length === 0) {
-        console.warn('[VoiceCallScreen] Still no menu items after refresh');
+        logger.warn('[VoiceCallScreen] Still no menu items after refresh');
       }
       await startCall(items);
     } finally {
@@ -417,6 +421,15 @@ export const VoiceCallScreen: React.FC = () => {
   if (!isCallActive) {
     return (
       <ScrollView style={[styles.idleContainer, { paddingTop: insets.top }]} contentContainerStyle={styles.idleScroll}>
+        {/* Back button */}
+        <Pressable
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+          <Text style={styles.backBtnText}>Back</Text>
+        </Pressable>
+
         <View style={styles.idleHero}>
           <View style={styles.idleOrbOuter}>
             <View style={styles.idleOrbRing} />
@@ -687,7 +700,9 @@ const callStyles = StyleSheet.create({
 /* ── Idle + Text Mode Styles ── */
 const styles = StyleSheet.create({
   idleContainer: { flex: 1, backgroundColor: '#F7F8FC' },
-  idleScroll: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingTop: 40, paddingBottom: 40 },
+  idleScroll: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: 40 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 4, marginBottom: 8 },
+  backBtnText: { fontSize: 16, fontWeight: '600', color: colors.textPrimary, marginLeft: 6 },
   idleHero: { alignItems: 'center', marginBottom: 32 },
   idleOrbOuter: { width: 140, height: 140, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   idleOrbRing: { position: 'absolute', width: 140, height: 140, borderRadius: 70, borderWidth: 2, borderColor: '#4A90D920' },

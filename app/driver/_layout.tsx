@@ -1,7 +1,8 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../src/theme/theme';
+import { colors, shadows } from '../../src/theme/theme';
 
 export default function DriverLayout() {
   return (
@@ -11,17 +12,13 @@ export default function DriverLayout() {
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
           backgroundColor: colors.cardBackground,
-          borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 6,
-          paddingTop: 4,
-          shadowColor: '#000',
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: -2 },
-          elevation: 8,
+          borderTopWidth: 0,
+          height: Platform.OS === 'ios' ? 80 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 6,
+          paddingTop: 6,
+          ...shadows.lg,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
         headerShown: false,
       }}
     >
@@ -29,31 +26,40 @@ export default function DriverLayout() {
         name="available"
         options={{
           title: 'Available',
-          tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'list' : 'list-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="active"
         options={{
           title: 'Active',
-          tabBarIcon: ({ color, size }) => <Ionicons name="bicycle" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'bicycle' : 'bicycle-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="earnings"
         options={{
           title: 'Earnings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="wallet" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen name="heatmap" options={{ href: null }} />
+      <Tabs.Screen name="chat" options={{ href: null }} />
     </Tabs>
   );
 }

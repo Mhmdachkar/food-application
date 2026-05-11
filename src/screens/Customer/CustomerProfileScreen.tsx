@@ -6,9 +6,11 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../state/AuthStore';
 import { useNotificationStore } from '../../state/NotificationStore';
 import { colors, spacing, radii } from '../../theme/theme';
@@ -55,6 +57,13 @@ export const CustomerProfileScreen: React.FC = () => {
 
   const memory = user?.foodMemory;
 
+  const quickLinks = [
+    { icon: 'heart-outline' as const, label: 'Favorites', route: '/customer/favorites', color: '#FF4757' },
+    { icon: 'people-outline' as const, label: 'Group Order', route: '/customer/group', color: '#339AF0' },
+    { icon: 'gift-outline' as const, label: 'Refer & Earn', route: '/customer/referral', color: '#E64980' },
+    { icon: 'mic-outline' as const, label: 'AI Assistant', route: '/voice/call', color: '#845EF7' },
+  ];
+
   const settingsRows: SettingsRow[] = [
     { icon: '\uD83D\uDD14', label: 'Notifications', route: '/customer/notifications', badge: unread() },
     { icon: '\uD83D\uDCB3', label: 'Payment Methods', route: '/customer/payments' },
@@ -66,7 +75,7 @@ export const CustomerProfileScreen: React.FC = () => {
 
   return (
     <ScrollView style={[st.container, { paddingTop: insets.top }]} contentContainerStyle={{ paddingBottom: 100 }}>
-      <Text style={st.title}>Profile</Text>
+      <Text style={st.title}>Account</Text>
 
       {/* User Info Card */}
       <View style={st.profileCard}>
@@ -136,6 +145,18 @@ export const CustomerProfileScreen: React.FC = () => {
         </Pressable>
       )}
 
+      {/* Quick Access */}
+      <View style={st.quickGrid}>
+        {quickLinks.map(q => (
+          <Pressable key={q.label} style={({ pressed }) => [st.quickCard, pressed && { opacity: 0.7 }]} onPress={() => router.push(q.route as any)}>
+            <View style={[st.quickIconWrap, { backgroundColor: q.color + '15' }]}>
+              <Ionicons name={q.icon} size={22} color={q.color} />
+            </View>
+            <Text style={st.quickLabel}>{q.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       {/* Settings */}
       <Text style={st.sectionTitle}>Settings</Text>
       <View style={st.settingsCard}>
@@ -164,8 +185,8 @@ export const CustomerProfileScreen: React.FC = () => {
       </View>
 
       {/* Sign Out */}
-      <Pressable style={st.signOutButton} onPress={handleSignOut}>
-        <Text style={st.signOutIcon}>{'\uD83D\uDEAA'}</Text>
+      <Pressable style={({ pressed }) => [st.signOutButton, pressed && { opacity: 0.8 }]} onPress={handleSignOut}>
+        <Ionicons name="log-out-outline" size={20} color={colors.danger} />
         <Text style={st.signOutText}>Sign Out</Text>
       </Pressable>
 
@@ -202,6 +223,11 @@ const st = StyleSheet.create({
   cuisineChip: { backgroundColor: colors.accent + '15', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
   cuisineChipText: { fontSize: 12, fontWeight: '600', color: colors.accent },
 
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginHorizontal: spacing.lg, marginBottom: spacing.md },
+  quickCard: { width: '48%', backgroundColor: colors.cardBackground, borderRadius: radii.medium, padding: 14, alignItems: 'center', marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
+  quickIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  quickLabel: { fontSize: 12, fontWeight: '600', color: colors.textPrimary },
+
   sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: spacing.lg, marginBottom: spacing.sm, marginTop: spacing.sm },
   settingsCard: { marginHorizontal: spacing.lg, backgroundColor: colors.cardBackground, borderRadius: radii.medium, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, elevation: 1 },
   settingsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: spacing.md },
@@ -214,8 +240,7 @@ const st = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700', color: '#FFF' },
   settingsArrow: { fontSize: 22, color: colors.textSecondary },
 
-  signOutButton: { flexDirection: 'row', marginHorizontal: spacing.lg, marginTop: spacing.lg, padding: spacing.md, borderRadius: radii.medium, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
-  signOutIcon: { fontSize: 18, marginRight: 8 },
-  signOutText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  signOutButton: { flexDirection: 'row', marginHorizontal: spacing.lg, marginTop: spacing.lg, padding: spacing.md, borderRadius: radii.medium, backgroundColor: colors.cardBackground, borderWidth: 1.5, borderColor: colors.danger, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  signOutText: { fontSize: 15, fontWeight: '700', color: colors.danger },
   version: { textAlign: 'center', fontSize: 12, color: colors.textSecondary, marginTop: spacing.md },
 });

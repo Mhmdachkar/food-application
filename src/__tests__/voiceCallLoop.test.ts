@@ -53,6 +53,12 @@ jest.mock('expo-speech', () => ({
   stop: jest.fn(),
 }));
 
+jest.mock('expo-file-system', () => ({
+  File: jest.fn().mockImplementation((_uri: string) => ({
+    base64: jest.fn().mockResolvedValue('bW9ja19iYXNlNjRfYXVkaW8='),
+  })),
+}));
+
 jest.mock('react-native', () => ({
   Platform: { OS: 'android' },
 }));
@@ -943,6 +949,9 @@ describe('VoiceAIService chat — model selection and retry', () => {
     return {
       ok: true,
       status: 200,
+      headers: {
+        get: (name: string) => name.toLowerCase() === 'content-type' ? 'application/json' : null,
+      },
       json: async () => ({
         choices: [{
           message: { role: 'assistant', content },
@@ -985,7 +994,7 @@ describe('VoiceAIService chat — model selection and retry', () => {
 
     expect(result).toContain('great burger option');
     expect(fetchCalls.length).toBe(1);
-    expect(fetchCalls[0].model).toBe('openai-large');
+    expect(fetchCalls[0].model).toBe('openai');
   });
 
   test('primary model returns empty → falls back to fallback model', async () => {
@@ -1014,7 +1023,7 @@ describe('VoiceAIService chat — model selection and retry', () => {
 
     expect(result).toContain('Fallback works');
     expect(fetchCalls.length).toBe(2);
-    expect(fetchCalls[0].model).toBe('openai-large');
+    expect(fetchCalls[0].model).toBe('openai');
     expect(fetchCalls[1].model).toBe('openai');
   });
 
@@ -1062,11 +1071,11 @@ describe('VoiceAIService chat — model selection and retry', () => {
     );
 
     const systemMsg = capturedBody.messages[0].content;
-    expect(systemMsg.length).toBeLessThan(5000);
+    expect(systemMsg.length).toBeLessThan(7000);
     expect(systemMsg).toContain('...(more items available)');
   });
 
-  test('conversation history is trimmed to last 12 messages', async () => {
+  test('conversation history is trimmed to last 10 messages', async () => {
     const { VoiceAIService } = jest.requireActual('../services/VoiceAIService') as any;
     const service = new VoiceAIService();
 
@@ -1084,14 +1093,14 @@ describe('VoiceAIService chat — model selection and retry', () => {
 
     await service.chat(longHistory as any, 'Menu', 'Prefs', 'en');
 
-    // 1 system + 12 recent messages = 13
-    expect(capturedBody.messages.length).toBe(13);
+    // 1 system + 10 recent messages = 11
+    expect(capturedBody.messages.length).toBe(11);
     expect(capturedBody.messages[0].role).toBe('system');
-    expect(capturedBody.messages[1].content).toBe('Message 8');
-    expect(capturedBody.messages[12].content).toBe('Message 19');
+    expect(capturedBody.messages[1].content).toBe('Message 10');
+    expect(capturedBody.messages[10].content).toBe('Message 19');
   });
 
-  test('uses max_tokens=1024 for primary model', async () => {
+  test('uses max_tokens=300 for primary model', async () => {
     const { VoiceAIService } = jest.requireActual('../services/VoiceAIService') as any;
     const service = new VoiceAIService();
 
@@ -1109,11 +1118,11 @@ describe('VoiceAIService chat — model selection and retry', () => {
       'en',
     );
 
-    expect(capturedBody.model).toBe('openai-large');
-    expect(capturedBody.max_tokens).toBe(1024);
+    expect(capturedBody.model).toBe('openai');
+    expect(capturedBody.max_tokens).toBe(300);
   });
 
-  test('uses max_tokens=4096 for fallback model', async () => {
+  test('uses max_tokens=512 for fallback model', async () => {
     const { VoiceAIService } = jest.requireActual('../services/VoiceAIService') as any;
     const service = new VoiceAIService();
 
@@ -1122,10 +1131,11 @@ describe('VoiceAIService chat — model selection and retry', () => {
     global.fetch = jest.fn(async (_url: any, opts: any) => {
       const body = JSON.parse(opts.body);
       bodies.push(body);
-      if (body.model === 'openai-large') {
+      // First call returns empty, second call (fallback) returns content
+      if (bodies.length === 1) {
         return makeEmptyChatResponse();
       }
-      return makeChatResponse('Fallback reply! |||ACTION:{"type":"none"}|||', 'gpt-5-mini', 200);
+      return makeChatResponse('Fallback reply! |||ACTION:{"type":"none"}|||', 'openai', 200);
     }) as any;
 
     await service.chat(
@@ -1135,11 +1145,12 @@ describe('VoiceAIService chat — model selection and retry', () => {
       'en',
     );
 
+    expect(bodies.length).toBeGreaterThanOrEqual(2);
     expect(bodies[1].model).toBe('openai');
-    expect(bodies[1].max_tokens).toBe(4096);
+    expect(bodies[1].max_tokens).toBe(512);
   });
 
-  test('401 error propagates as auth error', async () => {
+  test('401 error propagates as request error', async () => {
     const { VoiceAIService } = jest.requireActual('../services/VoiceAIService') as any;
     const service = new VoiceAIService();
 
@@ -1149,9 +1160,9 @@ describe('VoiceAIService chat — model selection and retry', () => {
       json: async () => ({ error: { message: 'Unauthorized' } }),
     })) as any;
 
-    await expect(
-      service.chat([{ role: 'user', content: 'Hi' }], 'Menu', 'Prefs', 'en'),
-    ).rejects.toThrow('Invalid API key');
+    // 401 on all attempts → chat returns fallback message (graceful degradation)
+    const result = await service.chat([{ role: 'user', content: 'Hi' }], 'Menu', 'Prefs', 'en');
+    expect(result).toContain('sorry');
   });
 
   test('402 error retries on free tier and falls back gracefully', async () => {

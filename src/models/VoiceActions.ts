@@ -10,6 +10,7 @@ export type VoiceAction =
   | { type: 'add_to_cart'; itemName: string; quantity: number; modifiers?: Record<string, string[]>; instructions?: string }
   | { type: 'remove_from_cart'; itemName: string }
   | { type: 'update_quantity'; itemName: string; quantity: number }
+  | { type: 'set_item_note'; itemName: string; note: string }
   | { type: 'clear_cart' }
   | { type: 'view_cart' }
   | { type: 'apply_promo'; code: string }

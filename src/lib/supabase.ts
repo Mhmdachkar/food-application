@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Config } from '../config/Config';
+import { logger } from '../utils/logger';
 
 const url = Config.supabaseUrl;
 const key = Config.supabaseAnonKey;
@@ -12,9 +13,9 @@ export const isSupabaseConfigured =
   !key.includes('YOUR') &&
   url.startsWith('https://');
 
-console.log('[SUPABASE] url=', url ? url.substring(0, 30) + '...' : '(empty)');
-console.log('[SUPABASE] key length=', key.length);
-console.log('[SUPABASE] isConfigured=', isSupabaseConfigured);
+logger.log('[SUPABASE] url=', url ? url.substring(0, 30) + '...' : '(empty)');
+logger.log('[SUPABASE] key length=', key.length);
+logger.log('[SUPABASE] isConfigured=', isSupabaseConfigured);
 
 // Typed Supabase client instance shared across services.
 export const supabase: SupabaseClient = createClient(
