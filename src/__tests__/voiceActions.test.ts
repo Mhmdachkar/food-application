@@ -14,6 +14,7 @@ import {
 } from '../models/VoiceActions';
 import type { VoiceAction } from '../models/VoiceActions';
 import type { MenuItem } from '../models/MenuItem';
+import { parseAction, executeAction as executeActionReal } from '../state/VoiceCallStore';
 
 // ─── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -56,42 +57,8 @@ const MENU_ITEMS: MenuItem[] = [
 
 const MENU_NAMES = MENU_ITEMS.map(m => m.name);
 
-// ─── Re-implement parseAction and executeAction locally for pure unit testing ─
-// We test the pure functions from VoiceActions and also the parse/execute logic
-// from VoiceCallStore without requiring Zustand or service mocking.
-
-/**
- * parseAction — copied from VoiceCallStore for isolated testing.
- * In a real scenario we'd export it, but we test the logic here.
- */
-function parseAction(text: string): { cleanText: string; action: VoiceAction | null } {
-  const actionRegex = /\|\|\|ACTION:([\s\S]+?)\|\|\|/g;
-  const matches = [...text.matchAll(actionRegex)];
-
-  if (matches.length === 0) {
-    return { cleanText: text.trim(), action: null };
-  }
-
-  let cleanText = text.replace(actionRegex, '').trim();
-  cleanText = cleanText.replace(/\s{2,}/g, ' ').trim();
-
-  const rawJson = matches[0][1].trim();
-  try {
-    const action = JSON.parse(rawJson) as VoiceAction;
-    return { cleanText, action };
-  } catch {
-    const stripped = rawJson
-      .replace(/^```json?\s*/i, '')
-      .replace(/```\s*$/, '')
-      .trim();
-    try {
-      const action = JSON.parse(stripped) as VoiceAction;
-      return { cleanText, action };
-    } catch {
-      return { cleanText, action: null };
-    }
-  }
-}
+// ─── parseAction and executeAction are now imported from '../state/VoiceCallStore'
+// so tests validate the real production code paths.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // levenshtein
@@ -210,7 +177,7 @@ describe('parseAction', () => {
     it('parses a well-formed add_to_cart action', () => {
       const text = 'I\'ll add Smash Burger Deluxe ($14.99) to your cart. |||ACTION:{"type":"add_to_cart","itemName":"Smash Burger Deluxe","quantity":1}|||';
       const result = parseAction(text);
-      expect(result.cleanText).toBe("I'll add Smash Burger Deluxe ($14.99) to your cart.");
+      expect(result.cleanText).toBe("I'll add Smash Burger Deluxe ($14.99) to your cart");
       expect(result.action).toEqual({
         type: 'add_to_cart',
         itemName: 'Smash Burger Deluxe',
@@ -282,7 +249,7 @@ describe('parseAction', () => {
     it('parses none action and strips it from text', () => {
       const text = 'Our top picks are the Burger and Salad. |||ACTION:{"type":"none"}|||';
       const result = parseAction(text);
-      expect(result.cleanText).toBe('Our top picks are the Burger and Salad.');
+      expect(result.cleanText).toBe('Our top picks are the Burger and Salad');
       expect(result.action).toEqual({ type: 'none' });
     });
   });
@@ -304,14 +271,14 @@ describe('parseAction', () => {
       const text = 'Done. |||ACTION:{"type":"clear_cart"}||| Also |||ACTION:{"type":"view_cart"}|||';
       const result = parseAction(text);
       expect(result.action).toEqual({ type: 'clear_cart' });
-      expect(result.cleanText).toBe('Done. Also');
+      expect(result.cleanText).toBe('Done Also');
     });
 
     it('returns null action for malformed JSON', () => {
       const text = 'Oops. |||ACTION:{broken json}|||';
       const result = parseAction(text);
       expect(result.action).toBeNull();
-      expect(result.cleanText).toBe('Oops.');
+      expect(result.cleanText).toBe('Oops');
     });
 
     it('collapses double spaces left by stripping', () => {
@@ -323,7 +290,7 @@ describe('parseAction', () => {
     it('handles action block at the very start', () => {
       const text = '|||ACTION:{"type":"none"}||| Here you go.';
       const result = parseAction(text);
-      expect(result.cleanText).toBe('Here you go.');
+      expect(result.cleanText).toBe('Here you go');
       expect(result.action).toEqual({ type: 'none' });
     });
 
@@ -344,63 +311,16 @@ describe('parseAction', () => {
 
 import { useCartStore } from '../state/CartStore';
 
-// Re-implement executeAction locally to test without Zustand middleware issues
-function executeAction(action: VoiceAction, menuItems: MenuItem[]) {
-  const cartStore = useCartStore.getState();
-  const menuNames = menuItems.map(m => m.name);
-  const cartNames = cartStore.items.map((ci: any) => ci.menuItem.name);
-
-  switch (action.type) {
-    case 'add_to_cart': {
-      const matchedName = fuzzyMatchItemName(action.itemName, menuNames);
-      if (!matchedName) return { success: false, message: `"${action.itemName}" not found on the menu.`, action };
-      const item = menuItems.find(m => m.name === matchedName)!;
-      if (!item.isAvailable) return { success: false, message: `${item.name} is currently unavailable.`, action };
-      const qty = Math.max(1, action.quantity || 1);
-      cartStore.addItem(item, qty, action.modifiers || {}, action.instructions || '');
-      return { success: true, message: `Added ${qty}x ${item.name} ($${(item.price * qty).toFixed(2)}) to your cart.`, action };
-    }
-    case 'remove_from_cart': {
-      const matchedCart = fuzzyMatchItemName(action.itemName, cartNames);
-      if (!matchedCart) return { success: false, message: `"${action.itemName}" is not in your cart.`, action };
-      const cartItem = cartStore.items.find((ci: any) => ci.menuItem.name === matchedCart)!;
-      cartStore.removeItem(cartItem);
-      return { success: true, message: `Removed ${cartItem.menuItem.name} from your cart.`, action };
-    }
-    case 'update_quantity': {
-      const matchedCart = fuzzyMatchItemName(action.itemName, cartNames);
-      if (!matchedCart) return { success: false, message: `"${action.itemName}" is not in your cart.`, action };
-      const cartItem = cartStore.items.find((ci: any) => ci.menuItem.name === matchedCart)!;
-      const newQty = Math.max(0, action.quantity);
-      if (newQty === 0) {
-        cartStore.removeItem(cartItem);
-        return { success: true, message: `Removed ${cartItem.menuItem.name} from your cart.`, action };
-      }
-      cartStore.updateQuantity(cartItem, newQty);
-      return { success: true, message: `Updated ${cartItem.menuItem.name} to ${newQty}x.`, action };
-    }
-    case 'clear_cart': {
-      if (cartStore.isEmpty()) return { success: true, message: 'Your cart is already empty.', action };
-      cartStore.clear();
-      return { success: true, message: 'Cart cleared.', action };
-    }
-    case 'view_cart': {
-      if (cartStore.isEmpty()) return { success: true, message: 'Cart is empty.', action };
-      const itemList = cartStore.items.map((ci: any) => `${ci.quantity}x ${ci.menuItem.name}`).join(', ');
-      return { success: true, message: `Cart: ${itemList}`, action };
-    }
-    case 'apply_promo': {
-      cartStore.applyPromo(action.code);
-      return { success: true, message: `Promo code "${action.code}" applied.`, action };
-    }
-    case 'set_delivery_notes': {
-      useCartStore.setState({ deliveryNotes: action.notes });
-      return { success: true, message: `Delivery notes updated.`, action };
-    }
-    case 'none':
-    default:
-      return { success: true, message: '', action };
-  }
+// Wrapper around the production executeAction that provides mock storeGet/storeSet
+// for VoiceCallStore state (not needed for cart operations but required by signature).
+const mockVoiceState: Record<string, unknown> = {};
+async function executeAction(action: VoiceAction, menuItems: MenuItem[]) {
+  return await executeActionReal(
+    action,
+    menuItems,
+    () => mockVoiceState as any,
+    (partial: any) => Object.assign(mockVoiceState, partial),
+  );
 }
 
 describe('executeAction', () => {
@@ -417,8 +337,8 @@ describe('executeAction', () => {
   });
 
   describe('add_to_cart', () => {
-    it('adds an item to cart by exact name', () => {
-      const result = executeAction(
+    it('adds an item to cart by exact name', async () => {
+      const result = await executeAction(
         { type: 'add_to_cart', itemName: 'Smash Burger Deluxe', quantity: 1 },
         MENU_ITEMS,
       );
@@ -429,8 +349,8 @@ describe('executeAction', () => {
       expect(useCartStore.getState().items[0].quantity).toBe(1);
     });
 
-    it('adds an item by fuzzy/substring name', () => {
-      const result = executeAction(
+    it('adds an item by fuzzy/substring name', async () => {
+      const result = await executeAction(
         { type: 'add_to_cart', itemName: 'burger', quantity: 2 },
         MENU_ITEMS,
       );
@@ -439,8 +359,8 @@ describe('executeAction', () => {
       expect(useCartStore.getState().items[0].quantity).toBe(2);
     });
 
-    it('rejects an unavailable item', () => {
-      const result = executeAction(
+    it('rejects an unavailable item', async () => {
+      const result = await executeAction(
         { type: 'add_to_cart', itemName: 'Sold Out Special', quantity: 1 },
         MENU_ITEMS,
       );
@@ -449,8 +369,8 @@ describe('executeAction', () => {
       expect(useCartStore.getState().items).toHaveLength(0);
     });
 
-    it('rejects a non-existent item', () => {
-      const result = executeAction(
+    it('rejects a non-existent item', async () => {
+      const result = await executeAction(
         { type: 'add_to_cart', itemName: 'Lobster Thermidor', quantity: 1 },
         MENU_ITEMS,
       );
@@ -458,27 +378,27 @@ describe('executeAction', () => {
       expect(result.message).toContain('not found');
     });
 
-    it('stacks quantity when adding the same item twice', () => {
-      executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 1 }, MENU_ITEMS);
-      executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 2 }, MENU_ITEMS);
+    it('stacks quantity when adding the same item twice', async () => {
+      await executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 1 }, MENU_ITEMS);
+      await executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 2 }, MENU_ITEMS);
       expect(useCartStore.getState().items).toHaveLength(1);
       expect(useCartStore.getState().items[0].quantity).toBe(3);
     });
 
-    it('defaults quantity to 1 when 0 is passed', () => {
-      executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 0 }, MENU_ITEMS);
+    it('defaults quantity to 1 when 0 is passed', async () => {
+      await executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 0 }, MENU_ITEMS);
       expect(useCartStore.getState().items[0].quantity).toBe(1);
     });
   });
 
   describe('remove_from_cart', () => {
-    beforeEach(() => {
-      executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 2 }, MENU_ITEMS);
-      executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 1 }, MENU_ITEMS);
+    beforeEach(async () => {
+      await executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 2 }, MENU_ITEMS);
+      await executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 1 }, MENU_ITEMS);
     });
 
-    it('removes an item by exact name', () => {
-      const result = executeAction(
+    it('removes an item by exact name', async () => {
+      const result = await executeAction(
         { type: 'remove_from_cart', itemName: 'Caesar Salad' },
         MENU_ITEMS,
       );
@@ -487,8 +407,8 @@ describe('executeAction', () => {
       expect(useCartStore.getState().items[0].menuItem.name).toBe('Mango Smoothie');
     });
 
-    it('removes an item by fuzzy name', () => {
-      const result = executeAction(
+    it('removes an item by fuzzy name', async () => {
+      const result = await executeAction(
         { type: 'remove_from_cart', itemName: 'smoothie' },
         MENU_ITEMS,
       );
@@ -496,8 +416,8 @@ describe('executeAction', () => {
       expect(useCartStore.getState().items).toHaveLength(1);
     });
 
-    it('fails to remove an item not in cart', () => {
-      const result = executeAction(
+    it('fails to remove an item not in cart', async () => {
+      const result = await executeAction(
         { type: 'remove_from_cart', itemName: 'Margherita Pizza' },
         MENU_ITEMS,
       );
@@ -507,12 +427,12 @@ describe('executeAction', () => {
   });
 
   describe('update_quantity', () => {
-    beforeEach(() => {
-      executeAction({ type: 'add_to_cart', itemName: 'Spicy Tuna Roll', quantity: 2 }, MENU_ITEMS);
+    beforeEach(async () => {
+      await executeAction({ type: 'add_to_cart', itemName: 'Spicy Tuna Roll', quantity: 2 }, MENU_ITEMS);
     });
 
-    it('updates quantity of an existing item', () => {
-      const result = executeAction(
+    it('updates quantity of an existing item', async () => {
+      const result = await executeAction(
         { type: 'update_quantity', itemName: 'Spicy Tuna Roll', quantity: 5 },
         MENU_ITEMS,
       );
@@ -520,8 +440,8 @@ describe('executeAction', () => {
       expect(useCartStore.getState().items[0].quantity).toBe(5);
     });
 
-    it('removes item when quantity is set to 0', () => {
-      const result = executeAction(
+    it('removes item when quantity is set to 0', async () => {
+      const result = await executeAction(
         { type: 'update_quantity', itemName: 'Spicy Tuna Roll', quantity: 0 },
         MENU_ITEMS,
       );
@@ -530,8 +450,8 @@ describe('executeAction', () => {
       expect(useCartStore.getState().items).toHaveLength(0);
     });
 
-    it('fails for item not in cart', () => {
-      const result = executeAction(
+    it('fails for item not in cart', async () => {
+      const result = await executeAction(
         { type: 'update_quantity', itemName: 'Margherita Pizza', quantity: 3 },
         MENU_ITEMS,
       );
@@ -540,32 +460,32 @@ describe('executeAction', () => {
   });
 
   describe('clear_cart', () => {
-    it('clears a cart with items', () => {
-      executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 1 }, MENU_ITEMS);
-      executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 1 }, MENU_ITEMS);
-      const result = executeAction({ type: 'clear_cart' }, MENU_ITEMS);
+    it('clears a cart with items', async () => {
+      await executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 1 }, MENU_ITEMS);
+      await executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 1 }, MENU_ITEMS);
+      const result = await executeAction({ type: 'clear_cart' }, MENU_ITEMS);
       expect(result.success).toBe(true);
       expect(useCartStore.getState().items).toHaveLength(0);
     });
 
-    it('succeeds even when cart is already empty', () => {
-      const result = executeAction({ type: 'clear_cart' }, MENU_ITEMS);
+    it('succeeds even when cart is already empty', async () => {
+      const result = await executeAction({ type: 'clear_cart' }, MENU_ITEMS);
       expect(result.success).toBe(true);
       expect(result.message).toContain('already empty');
     });
   });
 
   describe('view_cart', () => {
-    it('reports empty cart', () => {
-      const result = executeAction({ type: 'view_cart' }, MENU_ITEMS);
+    it('reports empty cart', async () => {
+      const result = await executeAction({ type: 'view_cart' }, MENU_ITEMS);
       expect(result.success).toBe(true);
       expect(result.message).toContain('empty');
     });
 
-    it('lists cart items', () => {
-      executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 2 }, MENU_ITEMS);
-      executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 1 }, MENU_ITEMS);
-      const result = executeAction({ type: 'view_cart' }, MENU_ITEMS);
+    it('lists cart items', async () => {
+      await executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 2 }, MENU_ITEMS);
+      await executeAction({ type: 'add_to_cart', itemName: 'Mango Smoothie', quantity: 1 }, MENU_ITEMS);
+      const result = await executeAction({ type: 'view_cart' }, MENU_ITEMS);
       expect(result.success).toBe(true);
       expect(result.message).toContain('2x Caesar Salad');
       expect(result.message).toContain('1x Mango Smoothie');
@@ -573,17 +493,17 @@ describe('executeAction', () => {
   });
 
   describe('apply_promo', () => {
-    it('applies a valid promo code', () => {
-      executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 1 }, MENU_ITEMS);
-      const result = executeAction({ type: 'apply_promo', code: 'SAVE10' }, MENU_ITEMS);
+    it('applies a valid promo code', async () => {
+      await executeAction({ type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 1 }, MENU_ITEMS);
+      const result = await executeAction({ type: 'apply_promo', code: 'SAVE10' }, MENU_ITEMS);
       expect(result.success).toBe(true);
       expect(useCartStore.getState().promoDiscount).toBeGreaterThan(0);
     });
   });
 
   describe('set_delivery_notes', () => {
-    it('sets delivery notes', () => {
-      const result = executeAction(
+    it('sets delivery notes', async () => {
+      const result = await executeAction(
         { type: 'set_delivery_notes', notes: 'Ring the bell twice' },
         MENU_ITEMS,
       );
@@ -593,23 +513,23 @@ describe('executeAction', () => {
   });
 
   describe('none action', () => {
-    it('is a no-op and succeeds', () => {
-      const result = executeAction({ type: 'none' }, MENU_ITEMS);
+    it('is a no-op and succeeds', async () => {
+      const result = await executeAction({ type: 'none' }, MENU_ITEMS);
       expect(result.success).toBe(true);
       expect(result.message).toBe('');
     });
   });
 
   describe('action result always includes the action', () => {
-    it('includes the original action in every result', () => {
+    it('includes the original action in every result', async () => {
       const action: VoiceAction = { type: 'add_to_cart', itemName: 'Caesar Salad', quantity: 1 };
-      const result = executeAction(action, MENU_ITEMS);
+      const result = await executeAction(action, MENU_ITEMS);
       expect(result.action).toEqual(action);
     });
 
-    it('includes the action even on failure', () => {
+    it('includes the action even on failure', async () => {
       const action: VoiceAction = { type: 'add_to_cart', itemName: 'Nonexistent', quantity: 1 };
-      const result = executeAction(action, MENU_ITEMS);
+      const result = await executeAction(action, MENU_ITEMS);
       expect(result.action).toEqual(action);
       expect(result.success).toBe(false);
     });
@@ -632,52 +552,52 @@ describe('parseAction → executeAction pipeline', () => {
     });
   });
 
-  it('full flow: AI response → parse → execute → cart updated', () => {
+  it('full flow: AI response → parse → execute → cart updated', async () => {
     const aiResponse = "I'll add 2 Smash Burger Deluxe ($29.98) to your cart. |||ACTION:{\"type\":\"add_to_cart\",\"itemName\":\"Smash Burger Deluxe\",\"quantity\":2}|||";
     const { cleanText, action } = parseAction(aiResponse);
 
-    expect(cleanText).toBe("I'll add 2 Smash Burger Deluxe ($29.98) to your cart.");
+    expect(cleanText).toBe("I'll add 2 Smash Burger Deluxe ($29.98) to your cart");
     expect(action).not.toBeNull();
 
-    const result = executeAction(action!, MENU_ITEMS);
+    const result = await executeAction(action!, MENU_ITEMS);
     expect(result.success).toBe(true);
     expect(useCartStore.getState().items).toHaveLength(1);
     expect(useCartStore.getState().items[0].quantity).toBe(2);
   });
 
-  it('handles fuzzy name in AI response', () => {
+  it('handles fuzzy name in AI response', async () => {
     // AI might say "burger" instead of exact name
     const aiResponse = 'Adding a burger for you! |||ACTION:{"type":"add_to_cart","itemName":"burger","quantity":1}|||';
     const { action } = parseAction(aiResponse);
-    const result = executeAction(action!, MENU_ITEMS);
+    const result = await executeAction(action!, MENU_ITEMS);
     expect(result.success).toBe(true);
     expect(useCartStore.getState().items[0].menuItem.name).toBe('Smash Burger Deluxe');
   });
 
-  it('handles multiple operations in sequence', () => {
+  it('handles multiple operations in sequence', async () => {
     // Add item
     const add = parseAction('Added! |||ACTION:{"type":"add_to_cart","itemName":"Caesar Salad","quantity":1}|||');
-    executeAction(add.action!, MENU_ITEMS);
+    await executeAction(add.action!, MENU_ITEMS);
     expect(useCartStore.getState().items).toHaveLength(1);
 
     // Add another
     const add2 = parseAction('Added! |||ACTION:{"type":"add_to_cart","itemName":"Mango Smoothie","quantity":2}|||');
-    executeAction(add2.action!, MENU_ITEMS);
+    await executeAction(add2.action!, MENU_ITEMS);
     expect(useCartStore.getState().items).toHaveLength(2);
 
     // Update quantity
     const update = parseAction('Updated! |||ACTION:{"type":"update_quantity","itemName":"Caesar Salad","quantity":3}|||');
-    executeAction(update.action!, MENU_ITEMS);
+    await executeAction(update.action!, MENU_ITEMS);
     expect(useCartStore.getState().items.find((ci: any) => ci.menuItem.name === 'Caesar Salad')!.quantity).toBe(3);
 
     // Remove one
     const remove = parseAction('Removed! |||ACTION:{"type":"remove_from_cart","itemName":"Mango Smoothie"}|||');
-    executeAction(remove.action!, MENU_ITEMS);
+    await executeAction(remove.action!, MENU_ITEMS);
     expect(useCartStore.getState().items).toHaveLength(1);
 
     // Clear
     const clear = parseAction('Cleared! |||ACTION:{"type":"clear_cart"}|||');
-    executeAction(clear.action!, MENU_ITEMS);
+    await executeAction(clear.action!, MENU_ITEMS);
     expect(useCartStore.getState().items).toHaveLength(0);
   });
 

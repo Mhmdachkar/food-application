@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CartItem, Mood } from '../models/Cart';
 import type { MenuItem } from '../models/MenuItem';
 import { eventBus } from './EventBus';
@@ -63,7 +65,9 @@ const computeItemTotal = (ci: CartItem): number => {
   return (base + modifierTotal) * ci.quantity;
 };
 
-export const useCartStore = create<CartState>((set, get) => ({
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
   items: [],
   promoCode: '',
   promoDiscount: 0,
@@ -176,15 +180,19 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   applyPromo: code =>
     set(state => {
+      // Client-side preview only — the server (create_order RPC)
+      // validates the code against the promotions table and
+      // calculates the authoritative discount. This preview gives
+      // the user immediate UI feedback.
       const upper = code.toUpperCase();
       const subtotal = get().subtotal();
-      let discount = 0;
+      let previewDiscount = 0;
       let toast: string;
       if (upper === 'SAVE10') {
-        discount = subtotal * 0.1;
+        previewDiscount = subtotal * 0.1;
         toast = '10% discount applied!';
       } else if (upper === 'FREE5') {
-        discount = 5;
+        previewDiscount = 5;
         toast = '$5 discount applied!';
       } else {
         toast = 'Invalid promo code';
@@ -192,7 +200,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       return {
         ...state,
         promoCode: code,
-        promoDiscount: discount,
+        promoDiscount: previewDiscount,
         toastMessage: toast,
       };
     }),
@@ -222,5 +230,18 @@ export const useCartStore = create<CartState>((set, get) => ({
     }),
 
   clearToast: () => set({ toastMessage: undefined }),
-}));
+    }),
+    {
+      name: 'smartfood-cart',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        items: state.items,
+        promoCode: state.promoCode,
+        promoDiscount: state.promoDiscount,
+        deliveryNotes: state.deliveryNotes,
+        selectedTip: state.selectedTip,
+      }),
+    },
+  ),
+);
 

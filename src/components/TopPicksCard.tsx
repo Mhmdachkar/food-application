@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../constants/images';
 import { colors, shadows } from '../theme/theme';
 import type { MenuItem } from '../models/MenuItem';
 
@@ -18,7 +20,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ item, ordersInLastHo
     >
       <View style={s.imageWrap}>
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={s.image} />
+          <Image source={{ uri: item.imageUrl }} style={s.image} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
         ) : (
           <View style={[s.image, s.imagePlaceholder]}>
             <Text style={{ fontSize: 28 }}>{'\uD83C\uDF7D\uFE0F'}</Text>

@@ -3,10 +3,11 @@ import {
   View,
   Text,
   Pressable,
-  Image,
   StyleSheet,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../constants/images';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, shadows, spacing } from '../theme/theme';
 import type { CartItem } from '../models/Cart';
@@ -40,7 +41,9 @@ export const CartItemCard: React.FC<CartItemCardProps> = ({
         <Image
           source={{ uri: item.menuItem.imageUrl }}
           style={s.image}
-          resizeMode="cover"
+          contentFit="cover"
+          placeholder={{ blurhash: PLACEHOLDER_BLURHASH }}
+          transition={IMAGE_TRANSITION_MS}
         />
       ) : (
         <View style={[s.image, s.imagePlaceholder]} />

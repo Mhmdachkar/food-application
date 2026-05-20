@@ -3,11 +3,12 @@ import {
   View,
   Text,
   Pressable,
-  Image,
   StyleSheet,
   Animated,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../constants/images';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, shadows } from '../theme/theme';
 import { CAT_EMOJI } from '../constants/categories';
@@ -24,7 +25,7 @@ interface FoodCardProps {
   onPress: (item: MenuItem) => void;
 }
 
-export const FoodCard: React.FC<FoodCardProps> = ({ item, index, onAdd, onPress }) => {
+export const FoodCard = React.memo<FoodCardProps>(({ item, index, onAdd, onPress }) => {
   const scale = useRef(new Animated.Value(0.95)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -52,7 +53,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, index, onAdd, onPress 
     <Pressable onPress={() => onPress(item)}>
       <Animated.View style={[styles.card, { opacity, transform: [{ scale }] }]}>
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.image} />
+          <Image source={{ uri: item.imageUrl }} style={styles.image} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
         ) : (
           <View style={styles.imagePlaceholder}>
             <Text style={styles.placeholderEmoji}>{emoji}</Text>
@@ -90,7 +91,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, index, onAdd, onPress 
       </Animated.View>
     </Pressable>
   );
-};
+});
 
 const styles = StyleSheet.create({
   card: {

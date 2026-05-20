@@ -6,9 +6,10 @@ import {
   StyleSheet,
   Pressable,
   Switch,
-  Image,
   ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../../constants/images';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDataStore } from '../../state/DataStore';
 import { colors, spacing, radii } from '../../theme/theme';
@@ -40,7 +41,7 @@ export const AdminMenuScreen: React.FC = () => {
     <Card style={styles.itemCard}>
       <View style={styles.itemRow}>
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
+          <Image source={{ uri: item.imageUrl }} style={styles.itemImage} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
         ) : (
           <View style={styles.itemImagePlaceholder} />
         )}

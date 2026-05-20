@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable, Image,
+  View, Text, FlatList, StyleSheet, Pressable,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../../constants/images';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFavoritesStore } from '../../state/FavoritesStore';
@@ -38,7 +40,7 @@ export const FavoritesScreen: React.FC = () => {
           onPress={() => router.push(`/customer/item/${item.id}` as any)}
         >
           {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={s.img} />
+            <Image source={{ uri: item.imageUrl }} style={s.img} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
           ) : (
             <View style={s.imgPlaceholder}>
               <Text style={{ fontSize: 32 }}>{emoji}</Text>

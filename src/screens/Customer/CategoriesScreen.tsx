@@ -5,122 +5,104 @@ import {
   FlatList,
   StyleSheet,
   Pressable,
-  Image,
   TextInput,
   useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../../constants/images';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useDataStore } from '../../state/DataStore';
+import { useMenuQuery } from '../../hooks/useMenuQuery';
+import { CategorySkeleton } from '../../components/skeletons/CategorySkeleton';
 import { useCartStore } from '../../state/CartStore';
-import { colors, spacing, radii } from '../../theme/theme';
-import { Card } from '../../theme/components/Card';
-import { Chip } from '../../theme/components/Chip';
+import { colors, spacing } from '../../theme/theme';
 import { SectionHeader } from '../../theme/components/SectionHeader';
 import type { MenuItem, MenuCategory } from '../../models/MenuItem';
 import { CAT_EMOJI, CATEGORY_LABELS, CATEGORIES } from '../../constants/categories';
 
-/* ── Responsive Menu Item Card ── */
-const MenuItemCard: React.FC<{
+/* ── Compact Menu Item Card (2-col optimized) ── */
+const MenuItemCard = React.memo<{
   item: MenuItem;
   onAdd: (item: MenuItem) => void;
   onPress: (item: MenuItem) => void;
   cardWidth: number;
-}> = ({ item, onAdd, onPress, cardWidth }) => {
-  const imgHeight = Math.min(cardWidth * 0.55, 180);
+}>(({ item, onAdd, onPress, cardWidth }) => {
+  const imgHeight = cardWidth * 0.65;
 
   return (
-    <Pressable onPress={() => onPress(item)}>
-    <Card style={[styles.menuItem, { width: cardWidth }]}>
-      {/* Image */}
-      {item.imageUrl ? (
-        <Image
-          source={{ uri: item.imageUrl }}
-          style={[styles.itemImage, { height: imgHeight }]}
-          resizeMode="cover"
-        />
-      ) : (
-        <View style={[styles.itemImagePlaceholder, { height: imgHeight }]}>
-          <Text style={styles.placeholderEmoji}>
-            {CAT_EMOJI[item.category] ?? '\uD83C\uDF7D\uFE0F'}
-          </Text>
-        </View>
-      )}
-
-      {/* Limited time badge */}
-      {item.isLimitedTime && (
-        <View style={styles.limitedBadge}>
-          <Text style={styles.limitedText}>Limited Time</Text>
-        </View>
-      )}
-
-      {/* Content */}
-      <View style={styles.itemContent}>
-        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.itemDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
-
-        {/* Tags */}
-        {item.tags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {item.tags.slice(0, 3).map((tag, idx) => (
-              <Chip key={idx} label={tag} />
-            ))}
+    <Pressable
+      onPress={() => onPress(item)}
+      style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
+    >
+      <View style={[styles.menuItem, { width: cardWidth }]}>
+        {/* Image */}
+        {item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={[styles.itemImage, { height: imgHeight }]}
+            contentFit="cover"
+            placeholder={{ blurhash: PLACEHOLDER_BLURHASH }}
+            transition={IMAGE_TRANSITION_MS}
+          />
+        ) : (
+          <View style={[styles.itemImagePlaceholder, { height: imgHeight }]}>
+            <Text style={styles.placeholderEmoji}>
+              {CAT_EMOJI[item.category] ?? '\uD83C\uDF7D\uFE0F'}
+            </Text>
           </View>
         )}
 
-        {/* Nutrition info */}
-        <View style={styles.nutritionRow}>
-          <Text style={styles.nutritionText}>{item.calories} cal</Text>
-          <Text style={styles.nutritionDot}>{'\u00B7'}</Text>
-          <Text style={styles.nutritionText}>
-            {item.nutritionInfo.protein}g protein
-          </Text>
-          <Text style={styles.nutritionDot}>{'\u00B7'}</Text>
-          <Text style={styles.nutritionText}>~{item.prepTimeMinutes} min</Text>
+        {/* Limited time badge */}
+        {item.isLimitedTime && (
+          <View style={styles.limitedBadge}>
+            <Text style={styles.limitedText}>Limited</Text>
+          </View>
+        )}
+
+        {/* Rating badge */}
+        <View style={styles.ratingBadge}>
+          <Text style={styles.ratingBadgeText}>{'\u2B50'} {item.rating.toFixed(1)}</Text>
         </View>
 
-        {/* Price, rating, add button */}
-        <View style={styles.itemFooter}>
-          <View>
+        {/* Content */}
+        <View style={styles.itemContent}>
+          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.itemDescription} numberOfLines={1}>
+            {item.calories} cal {'\u00B7'} ~{item.prepTimeMinutes} min
+          </Text>
+
+          {/* Price + Add */}
+          <View style={styles.itemFooter}>
             <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
-            <Text style={styles.ratingText}>
-              {'\u2B50'} {item.rating.toFixed(1)} ({item.reviewCount})
-            </Text>
+            <Pressable
+              style={({ pressed }) => [styles.addBtn, pressed && { transform: [{ scale: 0.92 }] }]}
+              onPress={() => onAdd(item)}
+            >
+              <Ionicons name="add" size={16} color="#FFF" />
+            </Pressable>
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.8 }]}
-            onPress={() => onAdd(item)}
-          >
-            <Text style={styles.addBtnText}>+ Add</Text>
-          </Pressable>
         </View>
       </View>
-    </Card>
     </Pressable>
   );
-};
+});
 
 export const CategoriesScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { menuItems } = useDataStore();
+  const { data: menuItems = [], isLoading: menuLoading } = useMenuQuery();
   const { addItem } = useCartStore();
   const [selectedCategory, setSelectedCategory] =
     useState<MenuCategory>('burgers');
   const [search, setSearch] = useState('');
 
-  // Responsive: 2 columns on screens >= 600px, 1 column on smaller
-  const numColumns = width >= 600 ? 2 : 1;
-  const horizontalPad = spacing.lg;
-  const gap = spacing.md;
-  const cardWidth =
-    numColumns === 2
-      ? (width - horizontalPad * 2 - gap) / 2
-      : width - horizontalPad * 2;
+  // Always 2 columns for compact grid
+  const numColumns = 2;
+  const horizontalPad = spacing.md;
+  const gap = 12;
+  const cardWidth = (width - horizontalPad * 2 - gap) / 2;
 
   const categoryCount = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -142,6 +124,10 @@ export const CategoriesScreen: React.FC = () => {
   }, [menuItems, selectedCategory, search]);
 
   const goToItem = (item: MenuItem) => router.push(`/customer/menu-item/${item.id}` as any);
+
+  if (menuLoading && menuItems.length === 0) {
+    return <CategorySkeleton />;
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -219,7 +205,7 @@ export const CategoriesScreen: React.FC = () => {
         renderItem={({ item }) => (
           <MenuItemCard item={item} onAdd={i => addItem(i, 1)} onPress={goToItem} cardWidth={cardWidth} />
         )}
-        contentContainerStyle={[styles.listContent, { paddingBottom: spacing.xl }]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyEmoji}>{CAT_EMOJI[selectedCategory] ?? '\uD83C\uDF7D\uFE0F'}</Text>
@@ -242,17 +228,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
     paddingBottom: spacing.xs,
   },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
     color: colors.textPrimary,
   },
   itemCountHeader: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -260,8 +246,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0F0F0',
-    borderRadius: 12,
-    marginHorizontal: spacing.lg,
+    borderRadius: 14,
+    marginHorizontal: spacing.md,
     marginTop: spacing.sm,
     marginBottom: 4,
     paddingHorizontal: 12,
@@ -269,27 +255,27 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.textPrimary,
     marginLeft: 8,
     padding: 0,
   },
   categoriesContainer: {
-    marginBottom: spacing.sm,
+    marginBottom: 4,
   },
   categoriesList: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    gap: spacing.sm,
+    gap: 8,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    borderRadius: radii.button,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: colors.cardBackground,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
   },
   categoryChipActive: {
@@ -297,11 +283,11 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   categoryEmoji: {
-    fontSize: 16,
-    marginRight: 6,
+    fontSize: 14,
+    marginRight: 4,
   },
   categoryChipText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textPrimary,
   },
@@ -311,18 +297,18 @@ const styles = StyleSheet.create({
   catCount: {
     backgroundColor: '#E8E8E8',
     borderRadius: 8,
-    minWidth: 20,
-    height: 18,
+    minWidth: 18,
+    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 6,
-    paddingHorizontal: 5,
+    marginLeft: 5,
+    paddingHorizontal: 4,
   },
   catCountActive: {
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   catCountText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -330,70 +316,53 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   listContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: 4,
   },
   columnWrapper: {
-    justifyContent: 'space-between',
+    gap: 12,
   },
   menuItem: {
-    marginBottom: spacing.md,
-    padding: 0,
+    marginBottom: 12,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 14,
     overflow: 'hidden' as const,
-    borderRadius: radii.medium,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   itemImage: {
     width: '100%',
-    borderTopLeftRadius: radii.medium,
-    borderTopRightRadius: radii.medium,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
   },
   itemImagePlaceholder: {
     width: '100%',
-    backgroundColor: colors.border,
-    borderTopLeftRadius: radii.medium,
-    borderTopRightRadius: radii.medium,
+    backgroundColor: '#F5F5F5',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   placeholderEmoji: {
-    fontSize: 48,
+    fontSize: 32,
     opacity: 0.5,
   },
   itemContent: {
-    padding: spacing.md,
+    padding: 10,
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   itemDescription: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 8,
-    lineHeight: 18,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 8,
-    gap: 4,
-  },
-  nutritionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: 10,
-    gap: 4,
-  },
-  nutritionText: {
     fontSize: 11,
     color: colors.textSecondary,
-  },
-  nutritionDot: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginHorizontal: 2,
+    marginBottom: 8,
   },
   itemFooter: {
     flexDirection: 'row',
@@ -401,38 +370,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   itemPrice: {
-    fontSize: 18,
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  ratingBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  ratingBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  ratingText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
   addBtn: {
     backgroundColor: colors.accent,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    borderRadius: radii.button,
-  },
-  addBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   limitedBadge: {
     position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    backgroundColor: colors.warning,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.small,
+    top: 8,
+    right: 8,
+    backgroundColor: colors.danger,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
     zIndex: 1,
   },
   limitedText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     color: '#FFFFFF',
   },

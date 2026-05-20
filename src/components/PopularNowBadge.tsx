@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { TrendingUp } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export interface PopularNowBadgeProps {
   ordersInLastHour: number;
@@ -21,7 +21,7 @@ export const PopularNowBadge: React.FC<PopularNowBadgeProps> = ({ ordersInLastHo
   return (
     <Animated.View testID="popular-now-badge" style={[s.container, { opacity }]}>
       <View style={s.dot} />
-      <TrendingUp size={13} color="#E74C3C" />
+      <Ionicons name="trending-up-outline" size={13} color="#E74C3C" />
       <Text style={s.text}>{ordersInLastHour}+ ordered in the last hour</Text>
     </Animated.View>
   );

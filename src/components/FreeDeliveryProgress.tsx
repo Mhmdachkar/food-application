@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
-import { Truck, Check } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/theme';
 
 const FREE_DELIVERY_THRESHOLD = 30;
@@ -33,9 +33,9 @@ export const FreeDeliveryProgress: React.FC<FreeDeliveryProgressProps> = ({ subt
     return (
       <View testID="free-delivery-reached" style={[s.container, s.containerReached]}>
         <View style={s.iconCircleGreen}>
-          <Truck size={18} color="#FFF" />
+          <Ionicons name="bicycle-outline" size={18} color="#FFF" />
           <View style={s.checkOverlay}>
-            <Check size={10} color="#FFF" strokeWidth={3} />
+            <Ionicons name="checkmark" size={10} color="#FFF" />
           </View>
         </View>
         <Text style={s.reachedText}>You got free delivery!</Text>
@@ -47,7 +47,7 @@ export const FreeDeliveryProgress: React.FC<FreeDeliveryProgressProps> = ({ subt
     <View testID="free-delivery-progress" style={[s.container, s.containerPending]}>
       <View style={s.topRow}>
         <View style={s.iconCircleOrange}>
-          <Truck size={18} color={colors.accent} />
+          <Ionicons name="bicycle-outline" size={18} color={colors.accent} />
         </View>
         <Text style={s.pendingText}>
           Add <Text style={s.amountText}>${remaining.toFixed(2)}</Text> more for free delivery

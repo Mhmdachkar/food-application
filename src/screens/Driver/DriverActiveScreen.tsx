@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../state/AuthStore';
 import { useDataStore } from '../../state/DataStore';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
 import { useMessageStore } from '../../state/MessageStore';
 import { colors, spacing, radii } from '../../theme/theme';
 import type { Order, OrderStatus } from '../../models/Order';
@@ -323,16 +324,13 @@ export const DriverActiveScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuthStore();
-  const { ordersForDriver, refreshOrders, updateOrderStatusLocalOrRemote, updateOrderLocally } = useDataStore();
+  const { data: allOrders = [] } = useOrdersQuery(user?.id, 'driver');
+  const { updateOrderStatusLocalOrRemote, updateOrderLocally } = useDataStore();
   const { sendEtaUpdate, sendStatusUpdate } = useMessageStore();
 
-  useEffect(() => {
-    if (user) refreshOrders(user.id, 'driver');
-  }, [user, refreshOrders]);
-
   const activeOrders = user
-    ? ordersForDriver(user.id).filter(o =>
-        ['READY', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(o.status),
+    ? allOrders.filter(o =>
+        o.driverId === user.id && ['READY', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(o.status),
       )
     : [];
 

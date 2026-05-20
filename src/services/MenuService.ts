@@ -15,6 +15,7 @@ import type {
   NutritionInfo,
 } from '../models/MenuItem';
 import { logger } from '../utils/logger';
+import { withRetry, isTransientError } from '../utils/retry';
 
 export interface MenuServiceState {
   menuItems: MenuItem[];
@@ -52,11 +53,14 @@ export class MenuService {
 
   async fetchCategories(): Promise<void> {
     try {
-      const { data, error } = await this.client
-        .from('categories')
-        .select('*')
-        .order('sort_order')
-        .returns<DBCategory[]>();
+      const { data, error } = await withRetry(
+        async () => await this.client
+          .from('categories')
+          .select('*')
+          .order('sort_order')
+          .returns<DBCategory[]>(),
+        { label: 'MenuService.fetchCategories', shouldRetry: isTransientError },
+      );
       if (error || !data) {
         logger.warn('[MENU] Failed to fetch categories:', error?.message);
         return;
@@ -73,10 +77,13 @@ export class MenuService {
     try {
       await this.fetchCategories();
 
-      const { data: dbItems, error: itemsErr } = await this.client
-        .from('menu_items')
-        .select('*')
-        .returns<DBMenuItem[]>();
+      const { data: dbItems, error: itemsErr } = await withRetry(
+        async () => await this.client
+          .from('menu_items')
+          .select('*')
+          .returns<DBMenuItem[]>(),
+        { label: 'MenuService.fetchMenuItems', shouldRetry: isTransientError },
+      );
       if (itemsErr || !dbItems) {
         logger.warn('[MENU] Failed to fetch menu items:', itemsErr?.message);
         this.state.errorMessage = itemsErr?.message ?? 'Failed to load menu';
@@ -85,20 +92,29 @@ export class MenuService {
       }
       logger.log('[MENU] Fetched', dbItems.length, 'menu items');
 
-      const { data: dbGroups } = await this.client
-        .from('modifier_groups')
-        .select('*')
-        .returns<DBModifierGroup[]>();
+      const { data: dbGroups } = await withRetry(
+        async () => await this.client
+          .from('modifier_groups')
+          .select('*')
+          .returns<DBModifierGroup[]>(),
+        { label: 'MenuService.fetchModifierGroups', shouldRetry: isTransientError },
+      );
 
-      const { data: dbOptions } = await this.client
-        .from('modifier_options')
-        .select('*')
-        .returns<DBModifierOption[]>();
+      const { data: dbOptions } = await withRetry(
+        async () => await this.client
+          .from('modifier_options')
+          .select('*')
+          .returns<DBModifierOption[]>(),
+        { label: 'MenuService.fetchModifierOptions', shouldRetry: isTransientError },
+      );
 
-      const { data: dbLinks } = await this.client
-        .from('item_modifier_groups')
-        .select('*')
-        .returns<DBItemModifierGroup[]>();
+      const { data: dbLinks } = await withRetry(
+        async () => await this.client
+          .from('item_modifier_groups')
+          .select('*')
+          .returns<DBItemModifierGroup[]>(),
+        { label: 'MenuService.fetchItemModifierGroups', shouldRetry: isTransientError },
+      );
 
       const catIdToEnum: Record<string, MenuCategory> = {};
       for (const cat of this.state.categories) {

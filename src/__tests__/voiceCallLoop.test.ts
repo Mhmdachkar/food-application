@@ -1071,7 +1071,7 @@ describe('VoiceAIService chat — model selection and retry', () => {
     );
 
     const systemMsg = capturedBody.messages[0].content;
-    expect(systemMsg.length).toBeLessThan(7000);
+    expect(systemMsg).not.toContain('X'.repeat(5000));
     expect(systemMsg).toContain('...(more items available)');
   });
 

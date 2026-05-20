@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, Image, Platform } from 'react-native';
-import { RotateCcw } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, Animated, Platform } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../constants/images';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, shadows } from '../theme/theme';
 import type { Order } from '../models/Order';
@@ -36,7 +38,7 @@ export const QuickReorderCard: React.FC<QuickReorderCardProps> = ({ order, onReo
           {thumbnails.map((ci, i) => (
             <View key={ci.id} style={[s.thumbCircle, i > 0 && { marginLeft: -10 }]}>
               {ci.menuItem.imageUrl ? (
-                <Image source={{ uri: ci.menuItem.imageUrl }} style={s.thumbImg} />
+                <Image source={{ uri: ci.menuItem.imageUrl }} style={s.thumbImg} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
               ) : (
                 <View style={[s.thumbImg, s.thumbPlaceholder]}>
                   <Text style={{ fontSize: 16 }}>{'\uD83C\uDF7D\uFE0F'}</Text>
@@ -55,7 +57,7 @@ export const QuickReorderCard: React.FC<QuickReorderCardProps> = ({ order, onReo
             style={({ pressed }) => [s.reorderBtn, pressed && { opacity: 0.9 }]}
             onPress={handlePress}
           >
-            <RotateCcw size={16} color="#FFF" />
+            <Ionicons name="refresh-outline" size={16} color="#FFF" />
             <Text style={s.reorderText}>Reorder</Text>
           </Pressable>
         </Animated.View>

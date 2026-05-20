@@ -144,28 +144,41 @@ export class AuthService {
 
   private async fetchProfile(userId: string, waitForTrigger = false): Promise<DBProfile | null> {
     logger.log('[AUTH] Fetching profile for user:', userId);
-    
-    // Only delay after sign-up to allow database trigger to complete
-    if (waitForTrigger) {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const maxAttempts = waitForTrigger ? 5 : 1;
+    let delay = 500; // ms — doubles each attempt: 500 → 1000 → 2000 → 4000 → 8000
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (waitForTrigger && attempt > 1) {
+        logger.log(`[AUTH] Profile poll attempt ${attempt}/${maxAttempts}, waiting ${delay}ms`);
+      }
+
+      // Wait before the query on retries (first attempt has no delay for non-trigger path)
+      if (waitForTrigger) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      const { data, error } = await this.client
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle<DBProfile>();
+
+      if (error) {
+        logger.error('[AUTH] Profile fetch error:', error.message);
+        return null;
+      }
+
+      if (data) {
+        return data;
+      }
+
+      // Profile not found yet — double delay for next attempt
+      delay *= 2;
     }
-    
-    const { data, error } = await this.client
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle<DBProfile>();
-    
-    if (error) {
-      logger.error('[AUTH] Profile fetch error:', error.message);
-      return null;
-    }
-    
-    if (!data) {
-      logger.log('[AUTH] No profile found for user:', userId);
-    }
-    
-    return data ?? null;
+
+    logger.log('[AUTH] No profile found for user:', userId);
+    return null;
   }
 }
 

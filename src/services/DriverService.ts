@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { DBDriverStatus, DBProfile } from '../models/SupabaseModels';
 import type { AppUser } from '../models/AppUser';
 import { mapProfileToAppUser } from './mappers/profileMapper';
+import { withRetry, isTransientError } from '../utils/retry';
 
 export interface DriverServiceState {
   onlineDrivers: AppUser[];
@@ -23,21 +24,27 @@ export class DriverService {
 
   async fetchDrivers(): Promise<void> {
     try {
-      const { data: profiles, error: pErr } = await this.client
-        .from('profiles')
-        .select('*')
-        .eq('role', 'driver')
-        .returns<DBProfile[]>();
+      const { data: profiles, error: pErr } = await withRetry(
+        async () => await this.client
+          .from('profiles')
+          .select('*')
+          .eq('role', 'driver')
+          .returns<DBProfile[]>(),
+        { label: 'DriverService.fetchDrivers.profiles', shouldRetry: isTransientError },
+      );
 
       if (pErr || !profiles) {
         this.state.errorMessage = pErr?.message ?? 'Failed to load drivers';
         return;
       }
 
-      const { data: statuses, error: sErr } = await this.client
-        .from('driver_status')
-        .select('*')
-        .returns<DBDriverStatus[]>();
+      const { data: statuses, error: sErr } = await withRetry(
+        async () => await this.client
+          .from('driver_status')
+          .select('*')
+          .returns<DBDriverStatus[]>(),
+        { label: 'DriverService.fetchDrivers.statuses', shouldRetry: isTransientError },
+      );
 
       if (sErr || !statuses) {
         this.state.errorMessage = sErr?.message ?? 'Failed to load driver status';
@@ -60,11 +67,14 @@ export class DriverService {
 
   async fetchAllDriverProfiles(): Promise<AppUser[]> {
     try {
-      const { data, error } = await this.client
-        .from('profiles')
-        .select('*')
-        .eq('role', 'driver')
-        .returns<DBProfile[]>();
+      const { data, error } = await withRetry(
+        async () => await this.client
+          .from('profiles')
+          .select('*')
+          .eq('role', 'driver')
+          .returns<DBProfile[]>(),
+        { label: 'DriverService.fetchAllDriverProfiles', shouldRetry: isTransientError },
+      );
       if (error || !data) return [];
       return data.map(mapProfileToAppUser);
     } catch {
@@ -78,13 +88,19 @@ export class DriverService {
       const now = new Date().toISOString();
       if (exists) {
         const payload = { is_online: isOnline, last_seen: now };
-        await this.client
-          .from('driver_status')
-          .update(payload)
-          .eq('driver_id', driverId);
+        await withRetry(
+          async () => await this.client
+            .from('driver_status')
+            .update(payload)
+            .eq('driver_id', driverId),
+          { label: 'DriverService.setOnlineStatus.update', shouldRetry: isTransientError },
+        );
       } else {
         const payload = { driver_id: driverId, is_online: isOnline };
-        await this.client.from('driver_status').insert(payload);
+        await withRetry(
+          async () => await this.client.from('driver_status').insert(payload),
+          { label: 'DriverService.setOnlineStatus.insert', shouldRetry: isTransientError },
+        );
       }
       this.state.driverStatuses[driverId] = {
         driver_id: driverId,

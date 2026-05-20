@@ -1,18 +1,20 @@
-import React, { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { useAuthStore } from '../src/state/AuthStore';
+import { SplashScreen } from '../src/components/SplashScreen';
 
 export default function Index() {
   const { user, role, isLoading, initialize } = useAuthStore();
   const router = useRouter();
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   useEffect(() => {
-    if (!isLoading && user && role) {
+    if (splashDone && !isLoading && user && role) {
       if (role === 'customer') {
         router.replace('/customer/home');
       } else if (role === 'admin') {
@@ -21,12 +23,20 @@ export default function Index() {
         router.replace('/driver/available');
       }
     }
-  }, [isLoading, user, role, router]);
+  }, [splashDone, isLoading, user, role, router]);
+
+  if (!splashDone) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#1A1A2E' }}>
+        <SplashScreen onFinish={() => setSplashDone(true)} />
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
+      <View style={{ flex: 1, backgroundColor: '#1A1A2E' }}>
+        <SplashScreen onFinish={() => {}} />
       </View>
     );
   }

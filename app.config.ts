@@ -9,10 +9,24 @@ export default {
     orientation: 'portrait',
     userInterfaceStyle: 'light',
     platforms: ['ios', 'android', 'web'],
+    web: {
+      bundler: 'metro',
+      output: 'single',
+    },
     experiments: {
       typedRoutes: true
     },
-    plugins: ['expo-router'],
+    plugins: [
+      'expo-router',
+      [
+        'expo-notifications',
+        {
+          icon: './assets/notification-icon.png',
+          color: '#FF8C1A',
+          defaultChannel: 'default',
+        },
+      ],
+    ],
     extra: {
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
@@ -20,6 +34,7 @@ export default {
       VOICE_CHAT_URL: process.env.VOICE_CHAT_URL,
       VOICE_TTS_URL: process.env.VOICE_TTS_URL,
       VOICE_STT_URL: process.env.VOICE_STT_URL,
+      GROQ_API_KEY: process.env.GROQ_API_KEY,
       APP_ENV: process.env.APP_ENV ?? 'development',
     }
   }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { Sparkles } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export interface SavingsCardProps {
   promoDiscount: number;
@@ -35,7 +35,7 @@ export const SavingsCard: React.FC<SavingsCardProps> = ({ promoDiscount, freeDel
       style={[s.container, { transform: [{ scale: bounceAnim }] }]}
     >
       <View style={s.iconCircle}>
-        <Sparkles size={18} color="#D4A017" />
+        <Ionicons name="sparkles-outline" size={18} color="#D4A017" />
       </View>
       <View style={s.textBlock}>
         <Text style={s.title}>You're saving ${totalSavings.toFixed(2)}</Text>

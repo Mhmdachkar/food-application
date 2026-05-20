@@ -20,6 +20,7 @@ export default function DriverLayout() {
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
         headerShown: false,
+        animation: 'fade',
       }}
     >
       <Tabs.Screen

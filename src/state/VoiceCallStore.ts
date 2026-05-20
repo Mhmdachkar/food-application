@@ -116,7 +116,7 @@ function detectLanguage(text: string): string {
  * Parse action block(s) from AI response.
  * Format: |||ACTION:{ JSON }|||
  */
-function parseAction(text: string): { cleanText: string; action: VoiceAction | null } {
+export function parseAction(text: string): { cleanText: string; action: VoiceAction | null } {
   // Match action blocks: |||ACTION:{...}||| — also handle missing closing |||
   const actionRegex = /\.?\s*\|{2,3}\s*ACTION\s*:\s*([\s\S]+?)\|{2,3}/gi;
   const matches = [...text.matchAll(actionRegex)];
@@ -135,7 +135,7 @@ function parseAction(text: string): { cleanText: string; action: VoiceAction | n
   // Clean up leftover punctuation, double spaces, trailing dots from stripping
   cleanText = cleanText
     .replace(/\s{2,}/g, ' ')
-    .replace(/\.\s*$/, '')       // trailing dot left after stripping
+    .replace(/\.\s*$/, '')       // intentional: strip trailing dot for cleaner TTS output
     .replace(/^\.\s*/, '')       // leading dot
     .trim();
 
@@ -173,7 +173,7 @@ function cartContextString(): string {
   return lines.join('\n');
 }
 
-async function executeAction(
+export async function executeAction(
   action: VoiceAction,
   menuItems: MenuItem[],
   storeGet: () => VoiceCallStateStore,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../state/AuthStore';
 import { useDataStore } from '../../state/DataStore';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
+import { useDriversQuery } from '../../hooks/useDriversQuery';
 import { colors, spacing, radii } from '../../theme/theme';
 import { Card } from '../../theme/components/Card';
 import { Button } from '../../theme/components/Button';
@@ -61,13 +63,11 @@ const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
 export const AdminOrdersScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { orders, refreshOrders, updateOrderStatusLocalOrRemote, drivers, assignDriverLocalOrRemote } = useDataStore();
+  const { data: orders = [] } = useOrdersQuery(user?.id, 'admin');
+  const { data: drivers = [] } = useDriversQuery(true);
+  const { updateOrderStatusLocalOrRemote, assignDriverLocalOrRemote } = useDataStore();
   const [selectedFilter, setSelectedFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-
-  useEffect(() => {
-    if (user) refreshOrders(user.id, 'admin');
-  }, [user, refreshOrders]);
 
   const filtered = selectedFilter === 'ALL'
     ? orders

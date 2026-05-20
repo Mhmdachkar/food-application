@@ -23,6 +23,8 @@
 | Audio | expo-av, expo-speech | ~16.0.8, ~14.0.8 |
 | Icons | @expo/vector-icons (Ionicons) | ^15.0.3 |
 | Storage | @react-native-async-storage | 2.2.0 |
+| Styling | NativeWind (TailwindCSS) | 4.2.3 (new code only) |
+| Data Fetching | @tanstack/react-query | (pending install) |
 
 ---
 
@@ -94,7 +96,7 @@ food app/
 │   │   ├── Admin/                # 8 screens
 │   │   ├── Shared/ChatScreen.tsx
 │   │   └── Voice/                # 2 screens (VoiceAIScreen, VoiceCallScreen)
-│   ├── components/               # 12 reusable components
+│   ├── components/               # 17 reusable components
 │   ├── theme/                    # Design tokens + themed components
 │   │   ├── theme.ts              # colors, spacing, radii, shadows, typography
 │   │   └── components/           # Button, Card, Input, Chip, EmptyState, etc.
@@ -108,7 +110,7 @@ food app/
 │   ├── fix_rls_policies.sql      # Additional RLS fixes
 │   └── new_features_schema.sql   # Loyalty, feedback, incidents, scheduling tables
 ├── docs/
-│   ├── GRILL_ME_AUDIT.md         # Technical audit with critical issues
+│   ├── GRILLME.md                # Technical audit with critical issues
 │   └── PRD.md                    # Product Requirements Document
 ├── app.config.ts                 # Expo config (reads .env)
 ├── package.json                  # Dependencies
@@ -205,24 +207,19 @@ npm run ios        # Run on iOS simulator
 npm run android    # Run on Android emulator
 npm run web        # Run on web (browser)
 npm test           # Run Jest tests
+npx tsc --noEmit        # Type-check without emitting files
+npx jest <filename>     # Run a single test file by name (e.g., npx jest voiceActions)
 ```
 
 ---
 
-## Known Issues & Tech Debt
+## Known Issues
 
-1. **No server-side price validation** — Order totals are client-computed and trusted by backend
-2. **No cart persistence** — CartStore is in-memory only (lost on app restart)
-3. **No order idempotency** — Double-tap can create duplicate orders
-4. **Demo credentials not gated** — `quickLogin` in AuthStore works in any environment
-5. **Promo codes are client-side only** — No server validation
-6. **No unit tests** — jest.config.js exists but no test files
-7. **No offline support** — App requires network for all operations
-8. **Realtime doesn't auto-reconnect** — WebSocket drops aren't handled
-9. **Heat map uses mock data** — No real demand backend
-10. **Payment is UI-only** — No Stripe/payment gateway integration
+See `docs/GRILLME.md` for the full technical audit. Top P0 blockers:
 
-See `docs/GRILL_ME_AUDIT.md` for the full technical audit.
+- **No server-side price validation** — client-computed totals are trusted by `create_order` RPC
+- **Demo credentials (`quickLogin`) not gated by `APP_ENV`** — admin accessible in production binary
+- **No order idempotency key** — double-tap or voice `confirm_order` can create duplicate orders
 
 ---
 
@@ -231,14 +228,39 @@ See `docs/GRILL_ME_AUDIT.md` for the full technical audit.
 - **TypeScript strict mode** — no `any` abuse, proper interfaces for all models
 - **Zustand stores:** interface-first, computed values as `() => T` functions
 - **Services:** singleton pattern, DI-ready constructors
-- **Screens:** functional components with hooks, StyleSheet at bottom of file
-- **Imports:** absolute from `src/` (e.g., `../../state/CartStore`)
+- **Screens:** functional components with hooks, StyleSheet at bottom of file (existing) or NativeWind className (new components)
+- **Imports:** relative paths (e.g., `../../state/CartStore`)
 - **Colors:** use `colors` from `src/theme/theme.ts`, primary accent is `#FF6B00`
 - **Icons:** Ionicons from `@expo/vector-icons`, not Lucide (despite package.json listing it)
 - **Animations:** React Native `Animated` API (no Reanimated)
 - **Navigation:** `useRouter()` from expo-router, `router.push()` / `router.replace()`
 - **Safe area:** `useSafeAreaInsets()` from react-native-safe-area-context
 - **No comments unless they mark sections** (e.g., `/* ── Header ── */`)
+
+---
+
+## AI Assistant Protocol
+
+**Read `docs/GRILLME.md`, `docs/HANDOFF.md`, and `docs/PRD.md` at the start of every session**
+
+1. **Ask the developer Phase 0 questions before doing any work** — what is the goal, any constraints, anything not in the docs
+2. **Spec before code, always. No exceptions**
+3. **One item at a time. Report after each one. Wait for "continue"**
+4. **Maximum two to three items per session before pausing for developer confirmation**
+5. **Small careful steps. This is a production codebase**
+6. **Never implement multiple items in the same code-writing session.** One item means one item — write the code, stop, report exactly what files changed and what was done, then wait for "continue." If you feel the urge to do the next item while you're already in the code, resist it. Batching is not efficiency, it is a loss of control. This rule has no exceptions.
+
+---
+
+## Hard Rules
+
+- Never use Lucide icons — all icons must use Ionicons from `@expo/vector-icons`
+- Never use Reanimated — use React Native's built-in `Animated` API only
+- Never write Supabase queries directly in screen components — always go through a service
+- **Existing files:** Never add inline styles — use `StyleSheet.create()` at the bottom of the file
+- **New components:** Use NativeWind `className` props. Theme tokens are mapped in `tailwind.config.ts`
+- Never commit `.env` values or hardcode credentials
+- Never modify SQL files that have already been applied to production — add new ones instead
 
 ---
 
@@ -268,7 +290,7 @@ See `docs/GRILL_ME_AUDIT.md` for the full technical audit.
 ## Reference Documents
 
 - `docs/PRD.md` — Full product requirements and feature status
-- `docs/GRILL_ME_AUDIT.md` — Technical audit with critical issues and recommendations
+- `docs/GRILLME.md` — Technical audit with critical issues and recommendations
 - `ARCHITECTURE_PARITY.md` — Swift-to-RN conversion parity comparison
 - `AUTH_FIX_GUIDE.md` — Authentication setup troubleshooting
 - `README.md` — Setup instructions and project overview

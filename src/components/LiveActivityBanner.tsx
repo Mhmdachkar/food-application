@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { Flame, Users } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-const MESSAGES: { icon: 'flame' | 'users'; text: string }[] = [
-  { icon: 'flame', text: '47 orders placed in the last 30 min' },
-  { icon: 'users', text: '128 people browsing right now' },
-  { icon: 'flame', text: 'Chicken Biryani is trending today' },
-  { icon: 'flame', text: 'Double Smash Burger is almost sold out' },
+const MESSAGES: { icon: 'flame-outline' | 'people-outline'; text: string }[] = [
+  { icon: 'flame-outline', text: '47 orders placed in the last 30 min' },
+  { icon: 'people-outline', text: '128 people browsing right now' },
+  { icon: 'flame-outline', text: 'Chicken Biryani is trending today' },
+  { icon: 'flame-outline', text: 'Double Smash Burger is almost sold out' },
 ];
 
 export const LiveActivityBanner: React.FC = () => {
@@ -32,12 +32,11 @@ export const LiveActivityBanner: React.FC = () => {
   }, []);
 
   const msg = MESSAGES[index];
-  const Icon = msg.icon === 'users' ? Users : Flame;
 
   return (
     <View testID="live-activity-banner" style={s.container}>
       <Animated.View style={[s.inner, { opacity }]}>
-        <Icon size={16} color="#666" />
+        <Ionicons name={msg.icon} size={16} color="#666" />
         <Text style={s.text}>{msg.text}</Text>
       </Animated.View>
       <View style={s.liveDot} />

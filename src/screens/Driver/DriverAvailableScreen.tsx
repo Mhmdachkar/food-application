@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../state/AuthStore';
 import { useDataStore } from '../../state/DataStore';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
+import { OrderCardSkeletonList } from '../../components/skeletons/OrderCardSkeleton';
 import { driverService } from '../../services/DriverService';
 import { colors } from '../../theme/theme';
 import type { Order } from '../../models/Order';
@@ -21,9 +23,9 @@ import type { Order } from '../../models/Order';
 const { width: SW } = Dimensions.get('window');
 
 /* ──── Delivery Card ──── */
-const DeliveryCard: React.FC<{
+const DeliveryCard = React.memo<{
   order: Order; index: number; onAccept: (id: string) => void;
-}> = ({ order, index, onAccept }) => {
+}>(({ order, index, onAccept }) => {
   const scale = useRef(new Animated.Value(0.92)).current;
   const op = useRef(new Animated.Value(0)).current;
 
@@ -103,22 +105,21 @@ const DeliveryCard: React.FC<{
       </Pressable>
     </Animated.View>
   );
-};
+});
 
 /* ──── Main Screen ──── */
 export const DriverAvailableScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuthStore();
-  const { availableOrders, driverAcceptOrder, refreshOrders, orders: allOrders } = useDataStore();
+  const { data: allOrders = [], isLoading: ordersLoading } = useOrdersQuery(user?.id, 'driver');
+  const { driverAcceptOrder } = useDataStore();
   const [isOnline, setIsOnline] = useState(true);
+
+  const availableOrders = allOrders.filter(o => o.status === 'READY' && !o.driverId);
 
   const headerOp = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(15)).current;
-
-  useEffect(() => {
-    if (user) refreshOrders(user.id, 'driver');
-  }, [user, refreshOrders]);
 
   useEffect(() => {
     Animated.parallel([
@@ -136,9 +137,17 @@ export const DriverAvailableScreen: React.FC = () => {
     if (user) driverAcceptOrder(orderId, user.id);
   };
 
-  const orders = availableOrders();
+  const orders = availableOrders;
   const completedToday = allOrders.filter(o => o.status === 'DELIVERED').length;
   const firstName = user?.name?.split(' ')[0] ?? 'Driver';
+
+  if (ordersLoading && allOrders.length === 0) {
+    return (
+      <View style={[s.container, { paddingTop: insets.top }]}>
+        <OrderCardSkeletonList count={4} />
+      </View>
+    );
+  }
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>

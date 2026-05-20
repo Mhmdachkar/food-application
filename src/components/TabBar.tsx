@@ -137,64 +137,72 @@ export const CustomerTabBar: React.FC<TabBarProps> = ({
   navigation,
 }) => {
   const insets = useSafeAreaInsets();
-  const bottomPadding = Math.max(insets.bottom, 8);
+  const bottomPadding = Math.max(insets.bottom, 12);
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingBottom: bottomPadding,
-          height: 60 + bottomPadding,
-        },
-      ]}
-    >
-      {state.routes.map((route: any, index: number) => {
-        if (!VISIBLE_TABS.includes(route.name)) return null;
+    <View style={[styles.outerWrap, { paddingBottom: bottomPadding }]}>
+      <View style={styles.container}>
+        {state.routes.map((route: any, index: number) => {
+          if (!VISIBLE_TABS.includes(route.name)) return null;
 
-        const { options } = descriptors[route.key];
-        const isFocused = state.index === index;
+          const { options } = descriptors[route.key];
+          const isFocused = state.index === index;
 
-        const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-          });
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name, route.params);
-          }
-        };
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name, route.params);
+            }
+          };
 
-        const onLongPress = () => {
-          navigation.emit({
-            type: 'tabLongPress',
-            target: route.key,
-          });
-        };
+          const onLongPress = () => {
+            navigation.emit({
+              type: 'tabLongPress',
+              target: route.key,
+            });
+          };
 
-        return (
-          <TabItem
-            key={route.key}
-            routeName={route.name}
-            isFocused={isFocused}
-            onPress={onPress}
-            onLongPress={onLongPress}
-          />
-        );
-      })}
+          return (
+            <TabItem
+              key={route.key}
+              routeName={route.name}
+              isFocused={isFocused}
+              onPress={onPress}
+              onLongPress={onLongPress}
+            />
+          );
+        })}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  outerWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
   container: {
     flexDirection: 'row',
     backgroundColor: colors.cardBackground,
-    borderTopWidth: 0,
-    paddingTop: 8,
-    ...shadows.lg,
-    ...(Platform.OS === 'android' && { elevation: 16 }),
+    borderRadius: 28,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    ...(Platform.OS === 'android' && { elevation: 20 }),
+    width: '100%',
+    maxWidth: 400,
   },
   tabItem: {
     flex: 1,

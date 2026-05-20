@@ -6,7 +6,10 @@ export default function CustomerLayout() {
   return (
     <Tabs
       tabBar={props => <CustomerTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        animation: 'fade',
+      }}
     >
       {/* ── 5 Visible Tabs ── */}
       <Tabs.Screen name="home" />

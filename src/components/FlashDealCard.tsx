@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, Image } from 'react-native';
-import { Zap } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../constants/images';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../theme/theme';
 import type { FlashDeal } from '../mocks/deals';
 
@@ -47,14 +49,14 @@ export const FlashDealCard: React.FC<FlashDealCardProps> = ({ deal, onAdd }) => 
     <Animated.View style={[s.card, { transform: [{ scale: pulseAnim }] }]}>
       <View style={s.imageWrap}>
         {deal.food.imageUrl ? (
-          <Image source={{ uri: deal.food.imageUrl }} style={s.image} />
+          <Image source={{ uri: deal.food.imageUrl }} style={s.image} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
         ) : (
           <View style={[s.image, s.imagePlaceholder]}>
             <Text style={{ fontSize: 32 }}>{'\uD83C\uDF54'}</Text>
           </View>
         )}
         <View style={s.discountBadge}>
-          <Zap size={10} color="#FFF" fill="#FFF" />
+          <Ionicons name="flash-outline" size={10} color="#FFF" />
           <Text style={s.discountText}>-{deal.discountPercent}%</Text>
         </View>
         <Pressable

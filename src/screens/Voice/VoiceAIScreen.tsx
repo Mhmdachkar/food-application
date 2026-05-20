@@ -12,8 +12,9 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../../constants/images';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { aiClient } from '../../services/AIClient';
 import { useDataStore } from '../../state/DataStore';
@@ -65,7 +66,7 @@ const SuggestionCard: React.FC<{
       ]}
     >
       {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={cardStyles.image} />
+        <Image source={{ uri: item.imageUrl }} style={cardStyles.image} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
       ) : (
         <View style={cardStyles.imagePlaceholder}>
           <Text style={cardStyles.imagePlaceholderText}>

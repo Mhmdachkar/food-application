@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../state/AuthStore';
-import { useDataStore } from '../../state/DataStore';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
 import { useMessageStore } from '../../state/MessageStore';
 import { colors } from '../../theme/theme';
 import type { Order } from '../../models/Order';
@@ -128,17 +128,13 @@ const DeliveryDetailModal: React.FC<{
 export const DriverEarningsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { ordersForDriver, refreshOrders } = useDataStore();
+  const { data: allOrders = [] } = useOrdersQuery(user?.id, 'driver');
   const { getAverageRating, getRatingsForDriver } = useMessageStore();
 
   const [period, setPeriod] = useState<PeriodKey>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  useEffect(() => {
-    if (user) refreshOrders(user.id, 'driver');
-  }, [user, refreshOrders]);
-
-  const driverOrders = user ? ordersForDriver(user.id) : [];
+  const driverOrders = user ? allOrders.filter(o => o.driverId === user.id) : [];
   const deliveredOrders = driverOrders.filter(o => o.status === 'DELIVERED');
 
   /* Period filtering */

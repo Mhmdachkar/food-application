@@ -11,7 +11,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useDataStore } from '../../state/DataStore';
+import { useMenuQuery } from '../../hooks/useMenuQuery';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
+import { HomeSkeleton } from '../../components/skeletons/HomeSkeleton';
 import { useCartStore } from '../../state/CartStore';
 import { useAuthStore } from '../../state/AuthStore';
 import { useRecentlyViewed } from '../../providers/RecentlyViewedProvider';
@@ -38,15 +40,12 @@ export const CustomerHomeScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, role } = useAuthStore();
-  const { menuItems, loadFromSupabase, orders } = useDataStore();
+  const { data: menuItems = [], isLoading: menuLoading } = useMenuQuery();
+  const { data: orders = [] } = useOrdersQuery(user?.id, role);
   const { addItem, itemCount, total } = useCartStore();
   const { recentItems } = useRecentlyViewed();
 
   const headerOp = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (user && role) loadFromSupabase(user.id, role);
-  }, [user, role, loadFromSupabase]);
 
   useEffect(() => {
     Animated.timing(headerOp, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -83,6 +82,10 @@ export const CustomerHomeScreen: React.FC = () => {
 
   const count = itemCount();
   const goToItem = (item: MenuItem) => router.push(`/customer/menu-item/${item.id}` as any);
+
+  if (menuLoading && menuItems.length === 0) {
+    return <HomeSkeleton />;
+  }
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
@@ -215,7 +218,7 @@ export const CustomerHomeScreen: React.FC = () => {
         ListEmptyComponent={
           <View style={s.emptyBox}>
             <Ionicons name="fast-food-outline" size={48} color={colors.textSecondary} />
-            <Text style={s.emptyText}>Loading delicious options...</Text>
+            <Text style={s.emptyText}>No items available right now</Text>
           </View>
         }
       />
@@ -223,7 +226,7 @@ export const CustomerHomeScreen: React.FC = () => {
       {/* ── Floating Cart Bar ── */}
       {count > 0 && (
         <Pressable
-          style={({ pressed }) => [s.cartBar, pressed && s.cartBarPressed, { bottom: insets.bottom + 12 }]}
+          style={({ pressed }) => [s.cartBar, pressed && s.cartBarPressed, { bottom: insets.bottom + 80 }]}
           onPress={() => router.push('/customer/cart' as any)}
         >
           <View style={s.cartBarLeft}>
@@ -239,7 +242,7 @@ export const CustomerHomeScreen: React.FC = () => {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
+  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.xs, paddingBottom: 100 },
   foodRow: { justifyContent: 'space-between' },
   pressed: { opacity: 0.7 },
 

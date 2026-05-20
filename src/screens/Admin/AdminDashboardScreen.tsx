@@ -12,7 +12,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../state/AuthStore';
-import { useDataStore } from '../../state/DataStore';
+import { useMenuQuery } from '../../hooks/useMenuQuery';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
+import { useDriversQuery } from '../../hooks/useDriversQuery';
+import { DashboardSkeleton } from '../../components/skeletons/DashboardSkeleton';
 import { colors } from '../../theme/theme';
 import type { Order } from '../../models/Order';
 
@@ -78,14 +81,12 @@ export const AdminDashboardScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuthStore();
-  const { orders, drivers, menuItems, loadFromSupabase } = useDataStore();
+  const { data: menuItems = [], isLoading: menuLoading } = useMenuQuery();
+  const { data: orders = [], isLoading: ordersLoading } = useOrdersQuery(user?.id, 'admin');
+  const { data: drivers = [] } = useDriversQuery(true);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    if (user) loadFromSupabase(user.id, 'admin');
-  }, [user, loadFromSupabase]);
 
   useEffect(() => {
     Animated.parallel([
@@ -112,6 +113,10 @@ export const AdminDashboardScreen: React.FC = () => {
   }, [orders]);
 
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  if ((menuLoading || ordersLoading) && orders.length === 0 && menuItems.length === 0) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <ScrollView style={[s.container, { paddingTop: insets.top }]} contentContainerStyle={s.content}>

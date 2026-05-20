@@ -18,7 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useVoiceCallStore, DEFAULT_QUICK_CHIPS } from '../../state/VoiceCallStore';
-import { useDataStore } from '../../state/DataStore';
+import { useMenuQuery, MENU_QUERY_KEY } from '../../hooks/useMenuQuery';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCartStore } from '../../state/CartStore';
 import { colors, spacing, radii } from '../../theme/theme';
 import type { ConversationMessage, QuickChip } from '../../models/VoiceCallTypes';
@@ -220,7 +221,7 @@ const TypingIndicator: React.FC = () => {
   );
 };
 
-const ChatBubble: React.FC<{ message: ConversationMessage }> = ({ message }) => {
+const ChatBubble = React.memo<{ message: ConversationMessage }>(({ message }) => {
   const isUser = message.role === 'user';
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(isUser ? 20 : -20)).current;
@@ -257,7 +258,7 @@ const ChatBubble: React.FC<{ message: ConversationMessage }> = ({ message }) => 
       </View>
     </Animated.View>
   );
-};
+});
 
 const bubbleStyles = StyleSheet.create({
   container: {
@@ -340,7 +341,8 @@ const bubbleStyles = StyleSheet.create({
 export const VoiceCallScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { menuItems, refreshMenu, isLoading: dataLoading } = useDataStore();
+  const { data: menuItems = [], isLoading: dataLoading } = useMenuQuery();
+  const queryClient = useQueryClient();
   const {
     messages,
     callState,
@@ -386,8 +388,15 @@ export const VoiceCallScreen: React.FC = () => {
       let items = menuItems;
       if (items.length === 0) {
         logger.log('[VoiceCallScreen] Menu empty, refreshing...');
-        await refreshMenu();
-        items = useDataStore.getState().menuItems;
+        const { menuService } = await import('../../services/MenuService');
+        const result = await queryClient.fetchQuery({
+          queryKey: MENU_QUERY_KEY,
+          queryFn: async () => {
+            await menuService.fetchMenuItems();
+            return menuService.state.menuItems;
+          },
+        });
+        items = result ?? [];
       }
       if (items.length === 0) {
         logger.warn('[VoiceCallScreen] Still no menu items after refresh');
@@ -396,7 +405,7 @@ export const VoiceCallScreen: React.FC = () => {
     } finally {
       setIsStarting(false);
     }
-  }, [startCall, menuItems, refreshMenu]);
+  }, [startCall, menuItems, queryClient]);
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();

@@ -6,6 +6,7 @@ import type { FoodMemory } from '../models/FoodMemory';
 import { authService } from '../services/AuthService';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { logger } from '../utils/logger';
+import { Config } from '../config/Config';
 
 export interface AuthState {
   user: AppUser | null;
@@ -76,6 +77,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   quickLogin: async (role) => {
+    if (!__DEV__ && Config.appEnv !== 'development') {
+      set({ error: 'Demo login is not available in production' });
+      return;
+    }
+
     // Demo credentials matching the seeded auth.users in seed.sql
     const demoCredentials: Record<UserRole, { email: string; password: string }> = {
       customer: { email: 'sarah@demo.com', password: 'Demo1234!' },

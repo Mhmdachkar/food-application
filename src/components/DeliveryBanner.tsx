@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { MapPin, ChevronRight } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../theme/theme';
 
 export interface DeliveryBannerProps {
@@ -21,7 +21,7 @@ export const DeliveryBanner: React.FC<DeliveryBannerProps> = ({
       onPress={onPress}
     >
       <View style={s.iconCircle}>
-        <MapPin size={18} color={colors.accent} />
+        <Ionicons name="location-outline" size={18} color={colors.accent} />
       </View>
       <View style={s.textBlock}>
         <Text style={s.label}>Delivering to</Text>
@@ -30,7 +30,7 @@ export const DeliveryBanner: React.FC<DeliveryBannerProps> = ({
       <View style={s.etaBadge}>
         <Text style={s.etaText}>{etaRange}</Text>
       </View>
-      <ChevronRight size={18} color={colors.textSecondary} />
+      <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
     </Pressable>
   );
 };

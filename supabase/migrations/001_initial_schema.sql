@@ -1,1 +1,15 @@
--- Initial schema placeholder – paste migrations later
+-- ============================================================
+-- SmartFood Delivery App — Migration Index
+--
+-- This file is intentionally empty.
+-- All schema migrations exist as individual SQL files in the
+-- parent supabase/ directory and have been applied manually.
+--
+-- See supabase/MIGRATION_ORDER.md for the exact execution
+-- order and status of each migration file.
+--
+-- NEW MIGRATIONS: Add new files here as
+--   YYYYMMDDHHMMSS_description.sql
+-- e.g. 20240601120000_add_blurhash_column.sql
+-- Then run: supabase db push (or apply via SQL Editor)
+-- ============================================================

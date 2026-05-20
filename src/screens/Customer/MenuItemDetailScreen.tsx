@@ -4,9 +4,10 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   Pressable,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../../constants/images';
 import { useCartStore } from '../../state/CartStore';
 import { colors, spacing, radii } from '../../theme/theme';
 import { Button } from '../../theme/components/Button';
@@ -56,7 +57,7 @@ export const MenuItemDetailScreen: React.FC<Props> = ({ item, onClose }) => {
   return (
     <ScrollView style={styles.container}>
       {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.heroImage} />
+        <Image source={{ uri: item.imageUrl }} style={styles.heroImage} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
       ) : (
         <View style={styles.heroPlaceholder} />
       )}

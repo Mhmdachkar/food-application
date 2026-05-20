@@ -11,17 +11,21 @@ import type { CartItem } from '../models/Cart';
 import type { DeliveryAddress } from '../models/AppUser';
 import type { Order, OrderStatus, OrderTimelineEvent } from '../models/Order';
 import { logger } from '../utils/logger';
+import { withRetry, isTransientError } from '../utils/retry';
 
 export interface CreateOrderParams {
   p_user_id: string;
   p_customer_name: string;
-  p_items: string;
-  p_address_snapshot: string;
+  p_items: string;           // JSON array — server looks up prices from menu_items
+  p_address_snapshot: string; // JSON object
   p_notes: string;
   p_promo_code?: string | null;
   p_tip: number;
   p_payment_method: string;
   p_delivery_method: string;
+  p_idempotency_key: string;
+  // NOTE: subtotal, tax, delivery_fee, discount, total are calculated
+  // server-side in the create_order RPC — never sent from client.
 }
 
 export interface UpdateStatusParams {
@@ -99,6 +103,11 @@ export class OrderService {
 
       const addrString = JSON.stringify(addressSnapshot);
 
+      const idempotencyKey =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+
       const params: CreateOrderParams = {
         p_user_id: userId,
         p_customer_name: customerName,
@@ -109,11 +118,15 @@ export class OrderService {
         p_tip: tip,
         p_payment_method: paymentMethod,
         p_delivery_method: deliveryMethod,
+        p_idempotency_key: idempotencyKey,
       };
 
-      const { data, error } = await this.client.rpc<string, CreateOrderParams>(
-        'create_order',
-        params,
+      const { data, error } = await withRetry(
+        async () => await this.client.rpc<string, CreateOrderParams>(
+          'create_order',
+          params,
+        ),
+        { label: 'OrderService.createOrder', shouldRetry: isTransientError },
       );
       if (error || !data) {
         this.errorMessage = error?.message ?? 'Failed to create order';
@@ -141,7 +154,10 @@ export class OrderService {
       }
       // For admin/driver we rely on RLS to scope what they see.
 
-      const { data: dbOrders, error } = await query.returns<DBOrder[]>();
+      const { data: dbOrders, error } = await withRetry(
+        async () => await query.returns<DBOrder[]>(),
+        { label: 'OrderService.fetchOrders', shouldRetry: isTransientError },
+      );
       if (error || !dbOrders) {
         logger.warn('[ORDERS] Failed to fetch orders:', error?.message);
         this.errorMessage = error?.message ?? 'Failed to fetch orders';
@@ -149,25 +165,51 @@ export class OrderService {
       }
       logger.log('[ORDERS] Fetched', dbOrders.length, 'orders');
 
-      const orders: Order[] = [];
-      for (const dbOrder of dbOrders) {
-        const { data: lines } = await this.client
-          .from('order_lines')
-          .select('*')
-          .eq('order_id', dbOrder.id)
-          .returns<DBOrderLine[]>();
+      const orderIds = dbOrders.map(o => o.id);
 
-        const { data: events } = await this.client
-          .from('order_status_events')
-          .select('*')
-          .eq('order_id', dbOrder.id)
-          .order('created_at', { ascending: true })
-          .returns<DBOrderStatusEvent[]>();
+      // Batch-fetch all lines and events in 2 queries instead of 2N
+      const [linesResult, eventsResult] = await Promise.all([
+        withRetry(
+          async () => await this.client
+            .from('order_lines')
+            .select('*')
+            .in('order_id', orderIds)
+            .returns<DBOrderLine[]>(),
+          { label: 'OrderService.fetchOrderLines', shouldRetry: isTransientError },
+        ),
+        withRetry(
+          async () => await this.client
+            .from('order_status_events')
+            .select('*')
+            .in('order_id', orderIds)
+            .order('created_at', { ascending: true })
+            .returns<DBOrderStatusEvent[]>(),
+          { label: 'OrderService.fetchOrderEvents', shouldRetry: isTransientError },
+        ),
+      ]);
 
-        const order = this.mapDBOrderToOrder(dbOrder, lines ?? [], events ?? []);
-        orders.push(order);
+      // Group by order_id
+      const linesByOrder = new Map<string, DBOrderLine[]>();
+      for (const line of linesResult.data ?? []) {
+        const arr = linesByOrder.get(line.order_id) ?? [];
+        arr.push(line);
+        linesByOrder.set(line.order_id, arr);
       }
-      return orders;
+
+      const eventsByOrder = new Map<string, DBOrderStatusEvent[]>();
+      for (const evt of (eventsResult.data ?? [])) {
+        const arr = eventsByOrder.get(evt.order_id) ?? [];
+        arr.push(evt);
+        eventsByOrder.set(evt.order_id, arr);
+      }
+
+      return dbOrders.map(dbOrder =>
+        this.mapDBOrderToOrder(
+          dbOrder,
+          linesByOrder.get(dbOrder.id) ?? [],
+          eventsByOrder.get(dbOrder.id) ?? [],
+        ),
+      );
     } catch (e: any) {
       this.errorMessage = e?.message ?? 'Failed to fetch orders';
       return [];
@@ -187,7 +229,10 @@ export class OrderService {
         p_changed_by: changedBy,
         p_note: note ?? null,
       };
-      const { error } = await this.client.rpc('update_order_status', params);
+      const { error } = await withRetry(
+        async () => await this.client.rpc('update_order_status', params),
+        { label: 'OrderService.updateStatus', shouldRetry: isTransientError },
+      );
       if (error) {
         this.errorMessage = error.message;
         return false;
@@ -210,7 +255,10 @@ export class OrderService {
         p_driver_id: driverId,
         p_assigned_by: assignedBy,
       };
-      const { error } = await this.client.rpc('assign_driver', params);
+      const { error } = await withRetry(
+        async () => await this.client.rpc('assign_driver', params),
+        { label: 'OrderService.assignDriver', shouldRetry: isTransientError },
+      );
       if (error) {
         this.errorMessage = error.message;
         return false;
@@ -231,7 +279,10 @@ export class OrderService {
         p_order_id: orderId,
         p_driver_id: driverId,
       };
-      const { error } = await this.client.rpc('driver_accept_order', params);
+      const { error } = await withRetry(
+        async () => await this.client.rpc('driver_accept_order', params),
+        { label: 'OrderService.driverAcceptOrder', shouldRetry: isTransientError },
+      );
       if (error) {
         this.errorMessage = error.message;
         return false;

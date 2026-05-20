@@ -170,11 +170,11 @@ export const LoginScreen: React.FC = () => {
           <Animated.View style={[styles.heroSection, { opacity: heroOpacity, transform: [{ scale: heroScale }] }]}>
             <View style={styles.logoGlow}>
               <View style={styles.logoInner}>
-                <Text style={styles.logoEmoji}>{'\uD83C\uDF5C'}</Text>
+                <Text style={styles.logoEmoji}>{'\uD83C\uDF54'}</Text>
               </View>
             </View>
-            <Text style={styles.brandName}>SmartFood</Text>
-            <Text style={styles.brandTag}>Your cravings, delivered in minutes</Text>
+            <Text style={styles.brandName}>GrillMe</Text>
+            <Text style={styles.brandTag}>Fresh flavors, delivered fast</Text>
           </Animated.View>
 
           {/* ── Quick Access Cards ── */}

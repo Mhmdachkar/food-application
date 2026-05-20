@@ -4,14 +4,15 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
   Pressable,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useDataStore } from '../../state/DataStore';
 import { useAuthStore } from '../../state/AuthStore';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
+import { OrderCardSkeletonList } from '../../components/skeletons/OrderCardSkeleton';
 import { useFeedbackStore } from '../../state/FeedbackStore';
 import { colors, spacing, radii } from '../../theme/theme';
 import { Card } from '../../theme/components/Card';
@@ -41,11 +42,11 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 };
 
 /* ── OrderCard: extracted as a proper component so useState is valid ── */
-const OrderCard: React.FC<{
+const OrderCard = React.memo<{
   order: Order;
   getFeedbackForOrder: (orderId: string) => any;
   router: ReturnType<typeof useRouter>;
-}> = ({ order, getFeedbackForOrder, router }) => {
+}>(({ order, getFeedbackForOrder, router }) => {
   const [expanded, setExpanded] = React.useState(false);
 
   const sortedTimeline = [...order.timeline].sort(
@@ -206,7 +207,7 @@ const OrderCard: React.FC<{
       )}
     </Card>
   );
-};
+});
 
 const ACTIVE_STATUSES: OrderStatus[] = ['PLACED', 'ACCEPTED', 'PREPARING', 'READY', 'PICKED_UP', 'OUT_FOR_DELIVERY'];
 
@@ -214,32 +215,37 @@ export const OrdersScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, role } = useAuthStore();
-  const { orders, isLoading, ordersForCustomer, refreshOrders } =
-    useDataStore();
+  const { data: allOrders = [], isLoading, refetch } = useOrdersQuery(user?.id, role);
   const { getFeedbackForOrder, load: loadFeedback, isLoaded: feedbackLoaded } = useFeedbackStore();
   const [tab, setTab] = useState<'active' | 'past'>('active');
-
-  useEffect(() => {
-    if (user && role) {
-      refreshOrders(user.id, role);
-    }
-  }, [user, role, refreshOrders]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!feedbackLoaded) loadFeedback();
   }, [feedbackLoaded, loadFeedback]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
   const customerOrders =
-    user && role === 'customer' ? ordersForCustomer(user.id) : orders;
+    user && role === 'customer'
+      ? allOrders.filter(o => o.customerId === user.id)
+      : allOrders;
 
   const activeOrders = useMemo(() => customerOrders.filter(o => ACTIVE_STATUSES.includes(o.status)), [customerOrders]);
   const pastOrders = useMemo(() => customerOrders.filter(o => !ACTIVE_STATUSES.includes(o.status)), [customerOrders]);
   const displayedOrders = tab === 'active' ? activeOrders : pastOrders;
 
-  if (isLoading) {
+  if (isLoading && allOrders.length === 0) {
     return (
-      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={colors.accent} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>My Orders</Text>
+        </View>
+        <OrderCardSkeletonList count={5} />
       </View>
     );
   }
@@ -278,8 +284,16 @@ export const OrdersScreen: React.FC = () => {
               router={router}
             />
           )}
-          contentContainerStyle={{ paddingBottom: spacing.xl }}
+          contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+            />
+          }
         />
       )}
     </View>

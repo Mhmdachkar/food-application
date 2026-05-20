@@ -7,6 +7,7 @@ export interface AppConfig {
   voiceChatUrl: string;
   voiceTtsUrl: string;
   voiceSttUrl: string;
+  groqApiKey: string;
   appEnv: 'development' | 'production' | string;
 }
 
@@ -30,6 +31,7 @@ export const Config: AppConfig = {
   voiceChatUrl: getEnv('VOICE_CHAT_URL', 'https://text.pollinations.ai/openai/v1/chat/completions'),
   voiceTtsUrl: getEnv('VOICE_TTS_URL', 'https://text.pollinations.ai/openai'),
   voiceSttUrl: getEnv('VOICE_STT_URL', 'https://text.pollinations.ai/openai'),
+  groqApiKey: getEnv('GROQ_API_KEY'),
   appEnv: getEnv('APP_ENV', 'development'),
 };
 

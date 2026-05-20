@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image } from 'react-native';
-import { Clock } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { Image } from 'expo-image';
+import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../constants/images';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../theme/theme';
 import type { MenuItem } from '../models/MenuItem';
 
@@ -15,7 +17,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({ items, onP
   return (
     <View testID="recently-viewed-row" style={s.wrapper}>
       <View style={s.header}>
-        <Clock size={16} color={colors.textSecondary} />
+        <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
         <Text style={s.title}>Recently Viewed</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scroll}>
@@ -27,7 +29,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({ items, onP
             onPress={() => onPress?.(item)}
           >
             {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={s.image} />
+              <Image source={{ uri: item.imageUrl }} style={s.image} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
             ) : (
               <View style={[s.image, s.imagePlaceholder]}>
                 <Text style={{ fontSize: 22 }}>{'\uD83C\uDF7D\uFE0F'}</Text>
