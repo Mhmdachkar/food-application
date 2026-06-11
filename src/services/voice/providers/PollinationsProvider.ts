@@ -1,3 +1,4 @@
+import { Config } from '../../../config/Config';
 import { logger } from '../../../utils/logger';
 import type { AIProvider, ChatCompletionOptions, HealthCheckResult } from './AIProvider';
 import {
@@ -5,17 +6,27 @@ import {
   fetchWithRetry,
   parseApiError,
   extractContent,
-  getHeaders,
   REQUEST_TIMEOUT_MS,
-  POLLINATIONS_REFERRER,
 } from '../voiceApiUtils';
+
+const POLLINATIONS_BASE = 'https://gen.pollinations.ai';
 
 export class PollinationsProvider implements AIProvider {
   readonly name = 'Pollinations';
-  private chatUrl = 'https://text.pollinations.ai/';
   private _available = true;
   private _lastFailure = 0;
   private static readonly COOLDOWN_MS = 60_000;
+
+  private get chatUrl(): string {
+    return Config.voiceChatUrl || `${POLLINATIONS_BASE}/v1/chat/completions`;
+  }
+
+  private getHeaders(): Record<string, string> {
+    const key = Config.pollinationApiKey;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (key) headers['Authorization'] = `Bearer ${key}`;
+    return headers;
+  }
 
   isAvailable(): boolean {
     if (!this._available) {
@@ -36,9 +47,10 @@ export class PollinationsProvider implements AIProvider {
   async healthCheck(): Promise<HealthCheckResult> {
     const start = Date.now();
     try {
-      const urlObj = new URL(this.chatUrl);
-      const baseUrl = urlObj.origin;
-      const res = await fetchWithTimeout(`${baseUrl}/models`, { method: 'GET' }, 8000);
+      const res = await fetchWithTimeout(`${POLLINATIONS_BASE}/v1/models`, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      }, 8000);
       const latencyMs = Date.now() - start;
       if (res.ok || res.status < 500) {
         this._available = true;
@@ -58,13 +70,12 @@ export class PollinationsProvider implements AIProvider {
       messages: options.messages,
       temperature: options.temperature ?? 0.3,
       max_tokens: options.maxTokens,
-      referrer: POLLINATIONS_REFERRER,
     };
 
     try {
       const res = await fetchWithRetry(this.chatUrl, {
         method: 'POST',
-        headers: getHeaders(),
+        headers: this.getHeaders(),
         body: JSON.stringify(body),
       });
 
@@ -74,19 +85,8 @@ export class PollinationsProvider implements AIProvider {
         throw new Error(`Pollinations error (${res.status}): ${errMsg}`);
       }
 
-      const contentType = res.headers.get('content-type') || '';
-      let content = '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json();
-        content = extractContent(data);
-      } else {
-        content = (await res.text()).trim();
-      }
-
-      if (content && (content.includes('legacy text API is being deprecated') || content.includes('IMPORTANT NOTICE'))) {
-        logger.warn('[Pollinations] Deprecation notice in response, treating as empty');
-        return '';
-      }
+      const data = await res.json();
+      const content = extractContent(data);
 
       this._available = true;
       return content;

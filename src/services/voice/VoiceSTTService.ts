@@ -3,17 +3,30 @@ import { File as ExpoFile } from 'expo-file-system';
 import { Config } from '../../config/Config';
 import { logger } from '../../utils/logger';
 import {
-  arrayBufferToBase64,
   fetchWithRetry,
-  getHeaders,
   parseApiError,
-  extractContent,
   REQUEST_TIMEOUT_MS,
-  POLLINATIONS_REFERRER,
 } from './voiceApiUtils';
 
+const WHISPER_MODEL = 'whisper-large-v3';
+const TRANSCRIPTIONS_PATH = '/v1/audio/transcriptions';
+
 export class VoiceSTTService {
-  private sttUrl = Config.voiceSttUrl || 'https://text.pollinations.ai/openai';
+  private get baseUrl(): string {
+    return Config.voiceSttUrl || 'https://gen.pollinations.ai';
+  }
+
+  private get transcriptionsUrl(): string {
+    const base = this.baseUrl.replace(/\/+$/, '');
+    if (base.includes('/v1/audio')) return base;
+    return `${base}${TRANSCRIPTIONS_PATH}`;
+  }
+
+  private getAuthHeaders(): Record<string, string> {
+    const key = Config.pollinationApiKey;
+    if (key) return { 'Authorization': `Bearer ${key}` };
+    return {};
+  }
 
   async transcribeAudioBlob(audioBlob: Blob, filename: string = 'recording.webm', language?: string): Promise<string> {
     if (audioBlob.size < 100) {
@@ -22,9 +35,8 @@ export class VoiceSTTService {
     }
 
     try {
-      logger.log('[VoiceSTT] STT request (web/base64), size:', audioBlob.size, 'lang:', language ?? 'auto');
-      const base64 = await this._blobToBase64(audioBlob);
-      return await this._transcribeBase64(base64, filename.endsWith('.wav') ? 'wav' : 'webm', language);
+      logger.log('[VoiceSTT] Whisper STT (blob), size:', audioBlob.size, 'lang:', language ?? 'auto');
+      return await this._transcribeMultipart(audioBlob, filename, language);
     } catch (err: any) {
       if (err?.message?.includes('timed out')) {
         throw new Error('Speech recognition timed out. Please try again.');
@@ -35,41 +47,37 @@ export class VoiceSTTService {
 
   async transcribeFileUri(fileUri: string, mimeType: string = 'audio/wav', filename: string = 'recording.wav', language?: string): Promise<string> {
     try {
-      logger.log('[VoiceSTT] STT request (native/base64), uri:', fileUri, 'lang:', language ?? 'auto');
+      logger.log('[VoiceSTT] Whisper STT (file), uri:', fileUri, 'lang:', language ?? 'auto');
 
-      let base64: string;
+      let blob: Blob;
       if (Platform.OS !== 'web') {
         try {
           const file = new ExpoFile(fileUri);
           const buffer = await file.arrayBuffer();
-          base64 = arrayBufferToBase64(buffer);
-          logger.log('[VoiceSTT] Read file via ExpoFile.arrayBuffer(), base64 length:', base64.length);
+          blob = new Blob([buffer], { type: mimeType });
+          logger.log('[VoiceSTT] Read file via ExpoFile, blob size:', blob.size);
         } catch (readErr: any) {
-          logger.warn('[VoiceSTT] ExpoFile.arrayBuffer() failed:', readErr?.message);
-          logger.log('[VoiceSTT] Trying fetch+blob fallback for native...');
+          logger.warn('[VoiceSTT] ExpoFile read failed:', readErr?.message, '— trying fetch fallback');
           try {
             const response = await fetch(fileUri);
-            const blob = await response.blob();
-            base64 = await this._blobToBase64(blob);
-            logger.log('[VoiceSTT] Read file via fetch+blob fallback, base64 length:', base64.length);
+            blob = await response.blob();
+            logger.log('[VoiceSTT] Read file via fetch fallback, blob size:', blob.size);
           } catch (fetchErr: any) {
-            logger.error('[VoiceSTT] fetch+blob fallback also failed:', fetchErr?.message);
+            logger.error('[VoiceSTT] fetch fallback also failed:', fetchErr?.message);
             throw new Error('Could not read audio file for transcription');
           }
         }
       } else {
         const response = await fetch(fileUri);
-        const blob = await response.blob();
-        base64 = await this._blobToBase64(blob);
+        blob = await response.blob();
       }
 
-      if (!base64 || base64.length < 100) {
-        logger.warn('[VoiceSTT] Base64 audio too small:', base64?.length ?? 0);
+      if (blob.size < 100) {
+        logger.warn('[VoiceSTT] Audio blob too small after read:', blob.size);
         return '';
       }
 
-      const format = mimeType.includes('wav') ? 'wav' : mimeType.includes('webm') ? 'webm' : 'mp3';
-      return await this._transcribeBase64(base64, format, language);
+      return await this._transcribeMultipart(blob, filename, language);
     } catch (err: any) {
       if (err?.message?.includes('timed out')) {
         throw new Error('Speech recognition timed out. Please try again.');
@@ -79,54 +87,44 @@ export class VoiceSTTService {
     }
   }
 
-  _blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        const base64 = result.includes(',') ? result.split(',')[1] : result;
-        resolve(base64);
+  /**
+   * Uses the proper OpenAI-compatible POST /v1/audio/transcriptions endpoint
+   * with multipart/form-data, sending:
+   *   - file: audio blob
+   *   - model: whisper-large-v3
+   *   - language: optional ISO-639-1 code
+   */
+  private async _transcribeMultipart(audioBlob: Blob, filename: string, language?: string): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', audioBlob, filename);
+    formData.append('model', WHISPER_MODEL);
+
+    if (language) {
+      const langMap: Record<string, string> = {
+        en: 'en', ar: 'ar', fr: 'fr', es: 'es', de: 'de',
+        zh: 'zh', ja: 'ja', ko: 'ko', hi: 'hi', tr: 'tr',
       };
-      reader.onerror = () => reject(new Error('Failed to read audio file'));
-      reader.readAsDataURL(blob);
-    });
-  }
+      formData.append('language', langMap[language] ?? language);
+    }
 
-  private async _transcribeBase64(base64Audio: string, format: string, language?: string): Promise<string> {
-    const langHint = language ? ` Transcribe in ${language}.` : '';
-    const body = {
-      model: 'openai-audio',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: `Transcribe this audio exactly as spoken. Return ONLY the transcribed text, nothing else.${langHint}` },
-          {
-            type: 'input_audio',
-            input_audio: {
-              data: base64Audio,
-              format,
-            },
-          },
-        ],
-      }],
-      referrer: POLLINATIONS_REFERRER,
-    };
+    const url = this.transcriptionsUrl;
+    logger.log('[VoiceSTT] POST', url, 'model:', WHISPER_MODEL, 'lang:', language ?? 'auto', 'size:', audioBlob.size);
 
-    const res = await fetchWithRetry(this.sttUrl, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(body),
+      headers: this.getAuthHeaders(),
+      body: formData,
     }, REQUEST_TIMEOUT_MS, 1);
 
     if (!res.ok) {
       const errMsg = await parseApiError(res);
-      logger.error('[VoiceSTT] STT error:', res.status, errMsg);
+      logger.error('[VoiceSTT] Whisper error:', res.status, errMsg);
       throw new Error(`Transcription failed (${res.status}): ${errMsg}`);
     }
 
     const data = await res.json();
-    const text = extractContent(data).trim();
-    logger.log('[VoiceSTT] STT result:', text.substring(0, 80) || '(empty)');
+    const text = (data?.text ?? '').trim();
+    logger.log('[VoiceSTT] Whisper result:', text.substring(0, 80) || '(empty)');
     return text;
   }
 }
