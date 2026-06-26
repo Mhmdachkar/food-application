@@ -145,7 +145,7 @@ export const DriverAvailableScreen: React.FC = () => {
 
   /* Poll every 15 s so new READY orders appear automatically */
   const { data: allOrders = [], isLoading: ordersLoading } = useOrdersQuery(user?.id, 'driver', {
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
 
   /* Locally track declined card IDs so they disappear without a round-trip */

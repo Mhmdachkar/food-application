@@ -3,8 +3,15 @@ import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../../src/theme/theme';
+import { useRealtimeOrders } from '../../src/hooks/useRealtimeOrders';
+import { useRealtimeDriverStatus } from '../../src/hooks/useRealtimeDriverStatus';
 
-export default function AdminLayout() {
+function AdminTabs() {
+  /* Orders realtime — new PLACED orders appear instantly on the Orders tab. */
+  useRealtimeOrders();
+  /* Driver status realtime — Dispatch tab sees drivers go online/offline live. */
+  useRealtimeDriverStatus();
+
   return (
     <Tabs
       screenOptions={{
@@ -68,9 +75,13 @@ export default function AdminLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="users" options={{ href: null }} />
-      <Tabs.Screen name="messages" options={{ href: null }} />
+      <Tabs.Screen name="users"     options={{ href: null }} />
+      <Tabs.Screen name="messages"  options={{ href: null }} />
       <Tabs.Screen name="incidents" options={{ href: null }} />
     </Tabs>
   );
+}
+
+export default function AdminLayout() {
+  return <AdminTabs />;
 }

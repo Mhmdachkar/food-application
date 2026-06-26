@@ -347,7 +347,7 @@ export const DriverActiveScreen: React.FC = () => {
 
   /* Poll every 10 s — keeps ETA and status in sync with admin/kitchen changes */
   const { data: allOrders = [] } = useOrdersQuery(user?.id, 'driver', {
-    refetchInterval: 10_000,
+    refetchInterval: 60_000,
   });
 
   const activeOrders = user

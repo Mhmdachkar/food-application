@@ -61,7 +61,7 @@ export const AdminOrdersScreen: React.FC = () => {
 
   /* Poll every 20 s so new PLACED orders appear automatically */
   const { data: orders = [], isLoading } = useOrdersQuery(user?.id, 'admin', {
-    refetchInterval: 20_000,
+    refetchInterval: 60_000,
   });
   const { data: drivers = [] } = useDriversQuery(true);
 

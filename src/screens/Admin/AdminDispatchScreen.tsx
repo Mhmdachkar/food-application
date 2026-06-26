@@ -27,7 +27,7 @@ export const AdminDispatchScreen: React.FC = () => {
 
   /* Poll every 15 s — admins need near-real-time dispatch */
   const { data: orders = [], isLoading: ordersLoading } = useOrdersQuery(user?.id, 'admin', {
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
   const { data: drivers = [], isLoading: driversLoading } = useDriversQuery(true);
   const [assigning, setAssigning] = useState<string | null>(null);

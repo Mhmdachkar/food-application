@@ -3,8 +3,13 @@ import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../../src/theme/theme';
+import { useRealtimeOrders } from '../../src/hooks/useRealtimeOrders';
 
-export default function DriverLayout() {
+function DriverTabs() {
+  /* Realtime subscription: READY orders appear the moment kitchen marks them,
+   * and active delivery status updates propagate instantly. */
+  useRealtimeOrders();
+
   return (
     <Tabs
       screenOptions={{
@@ -60,7 +65,11 @@ export default function DriverLayout() {
         }}
       />
       <Tabs.Screen name="heatmap" options={{ href: null }} />
-      <Tabs.Screen name="chat" options={{ href: null }} />
+      <Tabs.Screen name="chat"    options={{ href: null }} />
     </Tabs>
   );
+}
+
+export default function DriverLayout() {
+  return <DriverTabs />;
 }

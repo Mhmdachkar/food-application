@@ -83,7 +83,7 @@ export const AdminDashboardScreen: React.FC = () => {
   const { user } = useAuthStore();
   const { data: menuItems = [], isLoading: menuLoading } = useMenuQuery();
   const { data: orders = [], isLoading: ordersLoading } = useOrdersQuery(user?.id, 'admin', {
-    refetchInterval: 20_000,
+    refetchInterval: 60_000,
   });
   const { data: drivers = [] } = useDriversQuery(true);
 
