@@ -46,6 +46,8 @@ ALTER TABLE order_status_events
 -- A driver claims an unassigned READY order.
 -- Returns the order ID on success, NULL if the order was
 -- already claimed by another driver (optimistic locking).
+DROP FUNCTION IF EXISTS driver_accept_order(UUID, UUID);
+
 CREATE OR REPLACE FUNCTION driver_accept_order(
   p_order_id   UUID,
   p_driver_id  UUID
@@ -100,6 +102,8 @@ GRANT EXECUTE ON FUNCTION driver_accept_order(UUID, UUID) TO authenticated;
 -- -------------------------------------------------------
 -- Creates or replaces the status-advance RPC used by drivers
 -- and kitchen staff.  Clears current_order_id when DELIVERED/CANCELED.
+DROP FUNCTION IF EXISTS update_order_status(UUID, TEXT, UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION update_order_status(
   p_order_id    UUID,
   p_new_status  TEXT,
