@@ -4,7 +4,15 @@ import type { Order } from '../models/Order';
 
 export const ORDERS_QUERY_KEY = ['orders'] as const;
 
-export function useOrdersQuery(userId: string | undefined, role: 'customer' | 'admin' | 'driver' | null) {
+interface UseOrdersOptions {
+  refetchInterval?: number | false;
+}
+
+export function useOrdersQuery(
+  userId: string | undefined,
+  role: 'customer' | 'admin' | 'driver' | null,
+  options?: UseOrdersOptions,
+) {
   return useQuery<Order[], Error>({
     queryKey: [...ORDERS_QUERY_KEY, userId, role],
     queryFn: async () => {
@@ -12,5 +20,6 @@ export function useOrdersQuery(userId: string | undefined, role: 'customer' | 'a
       return orderService.fetchOrders(userId, role);
     },
     enabled: !!userId && !!role,
+    refetchInterval: options?.refetchInterval,
   });
 }
