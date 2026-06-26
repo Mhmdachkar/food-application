@@ -10,7 +10,9 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useDataStore } from '../../state/DataStore';
+import { useAuthStore } from '../../state/AuthStore';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
+import { useDriversQuery } from '../../hooks/useDriversQuery';
 import { useMessageStore } from '../../state/MessageStore';
 import { colors } from '../../theme/theme';
 import type { Order } from '../../models/Order';
@@ -142,7 +144,9 @@ function statusColor(status: string): string {
 
 export const AdminUsersScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { orders, drivers } = useDataStore();
+  const { user } = useAuthStore();
+  const { data: orders = [] } = useOrdersQuery(user?.id, 'admin');
+  const { data: drivers = [] } = useDriversQuery(false);
   const { getAverageRating, getRatingsForDriver } = useMessageStore();
 
   const [tab, setTab] = useState<TabKey>('drivers');

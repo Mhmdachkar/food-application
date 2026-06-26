@@ -82,7 +82,9 @@ export const AdminDashboardScreen: React.FC = () => {
   const router = useRouter();
   const { user } = useAuthStore();
   const { data: menuItems = [], isLoading: menuLoading } = useMenuQuery();
-  const { data: orders = [], isLoading: ordersLoading } = useOrdersQuery(user?.id, 'admin');
+  const { data: orders = [], isLoading: ordersLoading } = useOrdersQuery(user?.id, 'admin', {
+    refetchInterval: 20_000,
+  });
   const { data: drivers = [] } = useDriversQuery(true);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
