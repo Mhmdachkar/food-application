@@ -14,7 +14,9 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCartStore } from '../../state/CartStore';
 import { useAuthStore } from '../../state/AuthStore';
-import { useDataStore } from '../../state/DataStore';
+import { orderService } from '../../services/OrderService';
+import { useQueryClient } from '@tanstack/react-query';
+import { ORDERS_QUERY_KEY } from '../../hooks/useOrdersQuery';
 import { colors, spacing, radii, shadows } from '../../theme/theme';
 import { Card } from '../../theme/components/Card';
 import { PriceBreakdown } from '../../theme/components/PriceBreakdown';
@@ -99,7 +101,7 @@ export const CheckoutScreen: React.FC = () => {
     promoCode, promoDiscount, deliveryNotes, selectedTip,
     setSelectedTip, applyPromo, removePromo, clear,
   } = useCartStore();
-  const { placeOrderViaSupabase } = useDataStore();
+  const queryClient = useQueryClient();
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isDelivery, setIsDelivery] = useState(true);
@@ -113,10 +115,8 @@ export const CheckoutScreen: React.FC = () => {
   const [addressError, setAddressError] = useState(false);
   const [outOfZone, setOutOfZone] = useState(false);
 
-  const addresses: DeliveryAddress[] = user?.address
-    ? [user.address]
-    : [{ street: '123 Main St', city: 'San Francisco', state: 'CA', zip: '94102', notes: '' }];
-  const selectedAddress = addresses[0];
+  const addresses: DeliveryAddress[] = user?.address ? [user.address] : [];
+  const selectedAddress = addresses[0] ?? null;
 
   const paymentOptions = [
     { id: 'card' as const, label: 'Credit Card •••• 4242' },
@@ -130,27 +130,40 @@ export const CheckoutScreen: React.FC = () => {
   const handlePlaceOrder = async () => {
     if (!user) { Alert.alert('Error', 'You must be logged in to place an order'); return; }
     if (items.length === 0) { Alert.alert('Error', 'Your cart is empty'); return; }
-    if (isDelivery && !selectedAddress) { setAddressError(true); Alert.alert('Error', 'Please add a delivery address'); return; }
+    if (isDelivery && !selectedAddress) {
+      setAddressError(true);
+      Alert.alert('No Address', 'Please add a delivery address in your profile before ordering.', [
+        { text: 'Add Address', onPress: () => router.push('/customer/addresses' as any) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
     if (outOfZone && isDelivery) { Alert.alert('Out of Zone', 'Delivery is not available to your area'); return; }
 
     setIsPlacingOrder(true);
-    const address: DeliveryAddress | undefined = isDelivery ? selectedAddress : undefined;
 
-    const orderId = await placeOrderViaSupabase({
+    const address: DeliveryAddress = isDelivery && selectedAddress
+      ? selectedAddress
+      : { street: '', city: '', state: '', zip: '', notes: '' };
+
+    const orderId = await orderService.createOrder({
       userId: user.id,
       customerName: user.name,
       items,
-      address: address ?? { street: '', city: '', state: '', zip: '', notes: '' },
+      address,
       notes,
       promoCode: promoCode || null,
-      tip: tipAmount(),
+      tip: isDelivery ? tipAmount() : 0,
       paymentMethod,
+      deliveryMethod: isDelivery ? 'delivery' : 'pickup',
     });
     setIsPlacingOrder(false);
 
     if (orderId) {
+      queryClient.invalidateQueries({ queryKey: [...ORDERS_QUERY_KEY] });
       Alert.alert('Order Placed!', `Your order #${orderId.slice(0, 8)} has been placed successfully.`, [
-        { text: 'View Orders', onPress: () => { clear(); router.replace('/customer/orders'); } },
+        { text: 'Track Order', onPress: () => { clear(); router.replace(`/customer/order/${orderId}` as any); } },
+        { text: 'View All Orders', onPress: () => { clear(); router.replace('/customer/orders'); } },
       ]);
     } else {
       Alert.alert('Order Failed', 'There was an error placing your order. Please try again.');

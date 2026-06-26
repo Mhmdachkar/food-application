@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/theme';
 
-const FREE_DELIVERY_THRESHOLD = 30;
+const FREE_DELIVERY_THRESHOLD = 35;
 
 export interface FreeDeliveryProgressProps {
   subtotal: number;

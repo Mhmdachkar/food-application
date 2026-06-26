@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCartStore } from '../../state/CartStore';
 import { useUpsellStore } from '../../state/UpsellStore';
-import { useDataStore } from '../../state/DataStore';
+import { useMenuQuery } from '../../hooks/useMenuQuery';
 import { colors, spacing, radii, shadows } from '../../theme/theme';
 import { Card } from '../../theme/components/Card';
 import { CartItemCard } from '../../components/CartItemCard';
@@ -40,7 +40,7 @@ export const CartScreen: React.FC = () => {
     applyPromo,
     removePromo,
   } = useCartStore();
-  const { menuItems } = useDataStore();
+  const { data: menuItems = [] } = useMenuQuery();
   const { suggestions, generateSuggestions, dismiss } = useUpsellStore();
 
   useEffect(() => {
@@ -123,7 +123,7 @@ export const CartScreen: React.FC = () => {
         {/* ── Savings ── */}
         <SavingsCard
           promoDiscount={promoDiscount}
-          freeDeliverySaved={subtotal() >= 30 ? 3.99 : 0}
+          freeDeliverySaved={subtotal() >= 35 ? 3.99 : 0}
         />
 
         {/* ── Delivery Estimate ── */}

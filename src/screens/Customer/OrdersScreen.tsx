@@ -177,6 +177,17 @@ const OrderCard = React.memo<{
             </View>
           </View>
 
+          {/* Track Order button for active orders */}
+          {ACTIVE_STATUSES.includes(order.status) && (
+            <Pressable
+              style={styles.trackBtn}
+              onPress={() => router.push(`/customer/order/${order.id}` as any)}
+            >
+              <Ionicons name="location-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.trackBtnText}>Track Order</Text>
+            </Pressable>
+          )}
+
           {/* Feedback & Report buttons for delivered orders */}
           {order.status === 'DELIVERED' && (
             <View style={styles.feedbackRow}>
@@ -515,6 +526,24 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontStyle: 'italic',
     marginTop: 4,
+  },
+  trackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: radii.small,
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  trackBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   feedbackRow: {
     flexDirection: 'row',

@@ -142,6 +142,25 @@ export class AuthService {
     await this.client.auth.signOut();
   }
 
+  async updateFoodMemory(userId: string, memory: {
+    dietary_restrictions?: string[];
+    disliked_ingredients?: string[];
+    spice_level?: string;
+    default_drink?: string | null;
+    common_notes?: string | null;
+    preferred_cuisines?: string[];
+  }): Promise<void> {
+    if (!isSupabaseConfigured) return;
+    try {
+      await this.client
+        .from('profiles')
+        .update({ food_memory: memory })
+        .eq('id', userId);
+    } catch {
+      // silently fail — AsyncStorage is the fallback
+    }
+  }
+
   private async fetchProfile(userId: string, waitForTrigger = false): Promise<DBProfile | null> {
     logger.log('[AUTH] Fetching profile for user:', userId);
 

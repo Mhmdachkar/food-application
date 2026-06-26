@@ -35,6 +35,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="favorites" options={{ href: null }} />
       <Tabs.Screen name="referral" options={{ href: null }} />
       <Tabs.Screen name="menu-item" options={{ href: null }} />
+      <Tabs.Screen name="order" options={{ href: null }} />
     </Tabs>
   );
 }

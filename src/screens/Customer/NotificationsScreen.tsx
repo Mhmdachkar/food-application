@@ -1,12 +1,25 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useNotificationStore } from '../../state/NotificationStore';
+import { useAuthStore } from '../../state/AuthStore';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
 import { colors, spacing, radii } from '../../theme/theme';
 import type { AppNotification } from '../../models/Notification';
+
+const STATUS_MESSAGES: Record<string, string> = {
+  PLACED: 'Your order has been placed and is waiting to be accepted.',
+  ACCEPTED: 'Great news! The restaurant accepted your order.',
+  PREPARING: 'Your order is being prepared in the kitchen.',
+  READY: 'Your order is ready and waiting for pickup.',
+  PICKED_UP: 'A driver has picked up your order.',
+  OUT_FOR_DELIVERY: 'Your order is on its way to you!',
+  DELIVERED: 'Your order was delivered. Enjoy your meal! 🎉',
+  CANCELED: 'Your order was canceled.',
+};
 
 const ICON_MAP: Record<string, string> = {
   orderUpdate: '\uD83D\uDCE6',
@@ -19,6 +32,38 @@ export const NotificationsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { notifications, markAsRead, markAllAsRead } = useNotificationStore();
+  const { user, role } = useAuthStore();
+  const { data: orders = [] } = useOrdersQuery(user?.id, role);
+
+  /* Derive order-status notifications from real orders */
+  const orderNotifications = useMemo<AppNotification[]>(() => {
+    return orders.map(order => {
+      const lastEvent = [...order.timeline].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      )[0];
+      return {
+        id: `order-${order.id}`,
+        title: `Order #${order.id.slice(0, 8)} — ${lastEvent?.status.replace(/_/g, ' ') ?? order.status}`,
+        body: STATUS_MESSAGES[order.status] ?? `Status: ${order.status}`,
+        type: 'orderUpdate' as const,
+        isRead: !['PLACED', 'ACCEPTED', 'PREPARING', 'OUT_FOR_DELIVERY'].includes(order.status),
+        createdAt: lastEvent?.timestamp ?? order.createdAt,
+        orderId: order.id,
+      };
+    });
+  }, [orders]);
+
+  /* Merge store notifications + derived ones, sorted newest first */
+  const allNotifications = useMemo(() => {
+    const seen = new Set(notifications.map(n => n.id));
+    const merged = [
+      ...notifications,
+      ...orderNotifications.filter(n => !seen.has(n.id)),
+    ];
+    return merged.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [notifications, orderNotifications]);
 
   const timeAgo = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -34,7 +79,9 @@ export const NotificationsScreen: React.FC = () => {
       style={[s.card, !item.isRead && s.cardUnread]}
       onPress={() => {
         markAsRead(item.id);
-        if (item.orderId) router.push('/customer/orders');
+        if (item.orderId) {
+          router.push(`/customer/order/${item.orderId}` as any);
+        }
       }}
     >
       <View style={[s.iconCircle, !item.isRead && s.iconCircleUnread]}>
@@ -63,7 +110,7 @@ export const NotificationsScreen: React.FC = () => {
         </Pressable>
       </View>
       <FlatList
-        data={notifications}
+        data={allNotifications}
         keyExtractor={n => n.id}
         renderItem={renderItem}
         contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}

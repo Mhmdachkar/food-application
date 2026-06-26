@@ -69,6 +69,7 @@ export const CustomerProfileScreen: React.FC = () => {
     { icon: '\uD83D\uDCB3', label: 'Payment Methods', route: '/customer/payments' },
     { icon: '\uD83D\uDCCD', label: 'Saved Addresses', route: '/customer/addresses' },
     { icon: '\uD83D\uDEE1\uFE0F', label: 'Dietary Profile', route: '/customer/dietary' },
+    { icon: '\u23F0', label: 'Scheduled Orders', route: '/customer/schedule' },
     { icon: '\u2B50', label: 'Loyalty & Rewards', route: '/customer/loyalty' },
     { icon: '\u2753', label: 'Help & Support', route: '/customer/help' },
   ];

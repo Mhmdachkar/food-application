@@ -17,7 +17,9 @@ import { Button } from '../../theme/components/Button';
 import { KitchenQueueView } from './KitchenQueueScreen';
 import { useMessageStore } from '../../state/MessageStore';
 import { useAuthStore } from '../../state/AuthStore';
-import { useDataStore } from '../../state/DataStore';
+import { orderService } from '../../services/OrderService';
+import { useQueryClient } from '@tanstack/react-query';
+import { ORDERS_QUERY_KEY } from '../../hooks/useOrdersQuery';
 import type { Order, OrderStatus } from '../../models/Order';
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -109,7 +111,7 @@ const CancelModal: React.FC<{
 export const OrderTrackingScreen: React.FC<Props> = ({ order, onClose, onReorder }) => {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { updateOrderLocally, updateOrderStatusLocalOrRemote } = useDataStore();
+  const queryClient = useQueryClient();
   const { initThread, getThread, sendStatusUpdate } = useMessageStore();
   const [showCancel, setShowCancel] = useState(false);
 
@@ -150,11 +152,14 @@ export const OrderTrackingScreen: React.FC<Props> = ({ order, onClose, onReorder
     });
   };
 
-  const handleCancelOrder = (reason: string) => {
+  const handleCancelOrder = async (reason: string) => {
     setShowCancel(false);
-    updateOrderLocally(order.id, { cancelReason: reason, canceledBy: 'customer' });
-    updateOrderStatusLocalOrRemote(order.id, 'CANCELED', user?.id);
+    if (user) {
+      await orderService.updateStatus(order.id, 'CANCELED', user.id, reason);
+      queryClient.invalidateQueries({ queryKey: [...ORDERS_QUERY_KEY] });
+    }
     sendStatusUpdate(order.id, 'CANCELED', order.status);
+    onClose();
   };
 
   return (

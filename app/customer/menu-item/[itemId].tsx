@@ -6,6 +6,8 @@ import {
   Image,
   StyleSheet,
   Pressable,
+  TextInput,
+  ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -16,18 +18,17 @@ import { IconButton } from '../../../src/theme/components/IconButton';
 import { Button } from '../../../src/theme/components/Button';
 import { Chip } from '../../../src/theme/components/Chip';
 import { Badge } from '../../../src/theme/components/Badge';
-import { Divider } from '../../../src/theme/components/Divider';
 import { useCartStore } from '../../../src/state/CartStore';
-import { useDataStore } from '../../../src/state/DataStore';
+import { useMenuQuery } from '../../../src/hooks/useMenuQuery';
 import { useRecentlyViewed } from '../../../src/providers/RecentlyViewedProvider';
-import type { MenuItem, ModifierGroup, ModifierOption } from '../../../src/models/MenuItem';
+import type { MenuItem, ModifierGroup } from '../../../src/models/MenuItem';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.35;
 
 export default function MenuItemDetailScreen() {
   const params = useLocalSearchParams<{ itemId: string }>();
-  const { menuItems } = useDataStore();
+  const { data: menuItems = [], isLoading } = useMenuQuery();
   const { addItem } = useCartStore();
   const { trackView } = useRecentlyViewed();
 
@@ -43,9 +44,18 @@ export default function MenuItemDetailScreen() {
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string[]>>({});
   const [specialInstructions, setSpecialInstructions] = useState('');
 
+  if (isLoading) {
+    return (
+      <View style={styles.errorContainer}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
   if (!item) {
     return (
       <View style={styles.errorContainer}>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.textTertiary} />
         <Text style={styles.errorText}>Item not found</Text>
         <Button title="Go Back" onPress={() => router.back()} />
       </View>
@@ -271,17 +281,16 @@ export default function MenuItemDetailScreen() {
           {/* Special Instructions */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Special Instructions</Text>
-            <Pressable
+            <TextInput
               style={styles.instructionsInput}
-              onPress={() => {
-                // In a real app, you'd open a text input modal
-                // For now, we'll just leave it as a placeholder
-              }}
-            >
-              <Text style={styles.instructionsPlaceholder}>
-                {specialInstructions || 'Add a note (e.g., "Extra sauce")'}
-              </Text>
-            </Pressable>
+              value={specialInstructions}
+              onChangeText={setSpecialInstructions}
+              placeholder='Add a note (e.g., "Extra sauce")'
+              placeholderTextColor={colors.textTertiary}
+              multiline
+              numberOfLines={3}
+              maxLength={200}
+            />
           </View>
 
           <View style={{ height: 120 }} />
@@ -542,11 +551,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.medium,
     borderWidth: 1,
     borderColor: colors.border,
-    minHeight: 60,
-  },
-  instructionsPlaceholder: {
+    minHeight: 80,
     ...typography.body,
-    color: colors.textSecondary,
+    color: colors.textPrimary,
+    textAlignVertical: 'top',
   },
   bottomBar: {
     position: 'absolute',

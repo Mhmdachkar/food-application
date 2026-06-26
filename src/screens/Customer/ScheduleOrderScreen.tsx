@@ -3,8 +3,10 @@ import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useScheduleOrderStore } from '../../state/ScheduleOrderStore';
-import { useDataStore } from '../../state/DataStore';
+import { useCartStore } from '../../state/CartStore';
 import { colors, spacing, radii } from '../../theme/theme';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -12,8 +14,9 @@ const TIMES = ['11:30', '12:00', '12:15', '12:30', '13:00', '17:30', '18:00', '1
 
 export const ScheduleOrderScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { schedules, isLoaded, load, addSchedule, removeSchedule, toggleSchedule } = useScheduleOrderStore();
-  const { menuItems } = useDataStore();
+  const { items: cartItems } = useCartStore();
   const [showCreate, setShowCreate] = useState(false);
   const [label, setLabel] = useState('');
   const [selectedTime, setSelectedTime] = useState('12:00');
@@ -24,22 +27,37 @@ export const ScheduleOrderScreen: React.FC = () => {
 
   const handleCreate = () => {
     if (!label.trim()) { Alert.alert('Please enter a name for this schedule'); return; }
+    const itemIds = cartItems.map(ci => ci.menuItem.id);
+    if (itemIds.length === 0) {
+      Alert.alert(
+        'No Items',
+        'Add items to your cart first — the scheduled order will use your current cart.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
     addSchedule({
       label: label.trim(),
-      itemIds: [],
+      itemIds,
       deliveryTime: selectedTime,
       recurrence,
       dayOfWeek: selectedDay,
     });
     setShowCreate(false);
     setLabel('');
-    Alert.alert('Scheduled!', `Your order will be ready every ${DAYS[selectedDay]} at ${selectedTime}`);
+    Alert.alert(
+      'Scheduled!',
+      `"${label.trim()}" will run every ${DAYS[selectedDay]} at ${selectedTime} (${itemIds.length} item${itemIds.length !== 1 ? 's' : ''} from your current cart).`,
+    );
   };
 
   return (
     <ScrollView style={[s.container, { paddingTop: insets.top }]} contentContainerStyle={s.content}>
       <View style={s.header}>
-        <View>
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+        </Pressable>
+        <View style={s.headerCenter}>
           <Text style={s.title}>{'\uD83D\uDCC5'} Scheduled Orders</Text>
           <Text style={s.subtitle}>Set it and forget it</Text>
         </View>
@@ -140,7 +158,8 @@ export const ScheduleOrderScreen: React.FC = () => {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, paddingBottom: 100 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md, gap: spacing.sm },
+  headerCenter: { flex: 1 },
   title: { fontSize: 26, fontWeight: '800', color: colors.textPrimary },
   subtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
   addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },

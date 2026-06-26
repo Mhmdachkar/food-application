@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable,
+  View, Text, FlatList, StyleSheet, Pressable, ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../../constants/images';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFavoritesStore } from '../../state/FavoritesStore';
-import { useDataStore } from '../../state/DataStore';
+import { useMenuQuery } from '../../hooks/useMenuQuery';
 import { useCartStore } from '../../state/CartStore';
 import { FavoriteButton } from '../../components/FavoriteButton';
 import { colors, spacing, radii } from '../../theme/theme';
@@ -24,7 +24,7 @@ export const FavoritesScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { favoriteIds, isLoaded, load } = useFavoritesStore();
-  const { menuItems } = useDataStore();
+  const { data: menuItems = [], isLoading } = useMenuQuery();
   const { addItem } = useCartStore();
 
   useEffect(() => { if (!isLoaded) load(); }, [isLoaded, load]);
@@ -37,7 +37,7 @@ export const FavoritesScreen: React.FC = () => {
       <View style={s.card}>
         <Pressable
           style={s.cardInner}
-          onPress={() => router.push(`/customer/item/${item.id}` as any)}
+          onPress={() => router.push(`/customer/menu-item/${item.id}` as any)}
         >
           {item.imageUrl ? (
             <Image source={{ uri: item.imageUrl }} style={s.img} placeholder={{ blurhash: PLACEHOLDER_BLURHASH }} transition={IMAGE_TRANSITION_MS} contentFit="cover" />
@@ -67,6 +67,14 @@ export const FavoritesScreen: React.FC = () => {
       </View>
     );
   };
+
+  if (isLoading) {
+    return (
+      <View style={[s.container, s.centered, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
@@ -106,6 +114,7 @@ export const FavoritesScreen: React.FC = () => {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
+  centered: { alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 16,

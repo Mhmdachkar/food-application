@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { OrderFeedback, OrderIncident, IncidentType, ResolutionType, IncidentStatus } from '../models/Feedback';
 
 const FEEDBACK_KEY = '@smartfood_feedback';
@@ -51,6 +52,17 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       AsyncStorage.setItem(FEEDBACK_KEY, JSON.stringify(updated)).catch(() => {});
       return { feedbacks: updated };
     });
+    if (isSupabaseConfigured) {
+      supabase.from('order_feedback').insert({
+        order_id: feedback.orderId,
+        customer_id: feedback.customerId,
+        overall_rating: feedback.overallRating,
+        food_rating: feedback.foodRating ?? null,
+        delivery_rating: feedback.deliveryRating ?? null,
+        comment: feedback.comment ?? null,
+        tags: feedback.tags ?? [],
+      }).then(() => {}).catch(() => {});
+    }
   },
 
   submitIncident: (incident) => {
@@ -68,6 +80,15 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       AsyncStorage.setItem(INCIDENTS_KEY, JSON.stringify(updated)).catch(() => {});
       return { incidents: updated };
     });
+    if (isSupabaseConfigured) {
+      supabase.from('order_incidents').insert({
+        order_id: incident.orderId,
+        customer_id: incident.customerId,
+        type: incident.type,
+        description: incident.description,
+        status: 'open',
+      }).then(() => {}).catch(() => {});
+    }
   },
 
   resolveIncident: (incidentId, resolution, note) => {

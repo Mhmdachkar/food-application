@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AppUser } from '../models/AppUser';
 import type { UserRole } from '../models/UserRole';
 import type { FoodMemory } from '../models/FoodMemory';
+import type { DeliveryAddress } from '../models/AppUser';
 import { authService } from '../services/AuthService';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { logger } from '../utils/logger';
@@ -24,6 +25,8 @@ export interface AuthState {
   quickLogin: (role: UserRole) => Promise<void>;
   signOut: () => Promise<void>;
   updateFoodMemory: (memory: FoodMemory) => Promise<void>;
+  updateAddress: (address: DeliveryAddress) => Promise<void>;
+  loadAddress: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -43,6 +46,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
         error: undefined,
       });
+      await get().loadAddress();
     }
   },
 
@@ -58,6 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
         error: undefined,
       });
+      await get().loadAddress();
     }
   },
 
@@ -153,10 +158,42 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   updateFoodMemory: async (memory: FoodMemory) => {
     const currentUser = get().user;
     if (!currentUser) return;
-    const updated = { ...currentUser, foodMemory: memory };
-    set({ user: updated });
+    set({ user: { ...currentUser, foodMemory: memory } });
     try {
       await AsyncStorage.setItem(`food_memory_${currentUser.id}`, JSON.stringify(memory));
+      await authService.updateFoodMemory(currentUser.id, {
+        dietary_restrictions: memory.dietaryRestrictions,
+        disliked_ingredients: memory.dislikedIngredients,
+        spice_level: memory.spiceLevel,
+        default_drink: memory.defaultDrink,
+        common_notes: memory.commonNotes,
+        preferred_cuisines: memory.preferredCuisines,
+      });
+    } catch {
+      // silently fail
+    }
+  },
+
+  updateAddress: async (address: DeliveryAddress) => {
+    const currentUser = get().user;
+    if (!currentUser) return;
+    set({ user: { ...currentUser, address } });
+    try {
+      await AsyncStorage.setItem(`address_${currentUser.id}`, JSON.stringify(address));
+    } catch {
+      // silently fail
+    }
+  },
+
+  loadAddress: async () => {
+    const currentUser = get().user;
+    if (!currentUser || currentUser.address) return;
+    try {
+      const raw = await AsyncStorage.getItem(`address_${currentUser.id}`);
+      if (raw) {
+        const address: DeliveryAddress = JSON.parse(raw);
+        set({ user: { ...currentUser, address } });
+      }
     } catch {
       // silently fail
     }

@@ -82,14 +82,28 @@ export class OrderService {
     this.errorMessage = undefined;
 
     try {
-      const orderItems: CreateOrderItemJSON[] = items.map(ci => ({
-        item_id: ci.menuItem.id,
-        name: ci.menuItem.name,
-        image_url: ci.menuItem.imageUrl,
-        qty: ci.quantity,
-        notes: ci.specialInstructions,
-        modifiers: null,
-      }));
+      const orderItems: CreateOrderItemJSON[] = items.map(ci => {
+        const modifierLabels: string[] = [];
+        if (ci.selectedModifiers) {
+          Object.entries(ci.selectedModifiers).forEach(([groupId, optionIds]) => {
+            const group = ci.menuItem.modifierGroups.find(g => g.id === groupId);
+            if (group) {
+              optionIds.forEach(optId => {
+                const opt = group.options.find(o => o.id === optId);
+                if (opt) modifierLabels.push(opt.name);
+              });
+            }
+          });
+        }
+        return {
+          item_id: ci.menuItem.id,
+          name: ci.menuItem.name,
+          image_url: ci.menuItem.imageUrl,
+          qty: ci.quantity,
+          notes: ci.specialInstructions,
+          modifiers: modifierLabels.length > 0 ? modifierLabels : null,
+        };
+      });
 
       const itemsString = JSON.stringify(orderItems);
 

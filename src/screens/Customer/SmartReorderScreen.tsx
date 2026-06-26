@@ -4,7 +4,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSmartReorderStore, type ReorderSuggestion } from '../../state/SmartReorderStore';
-import { useDataStore } from '../../state/DataStore';
+import { useMenuQuery } from '../../hooks/useMenuQuery';
+import { useOrdersQuery } from '../../hooks/useOrdersQuery';
 import { useCartStore } from '../../state/CartStore';
 import { useAuthStore } from '../../state/AuthStore';
 import { colors, spacing, radii } from '../../theme/theme';
@@ -64,8 +65,9 @@ const SuggestionCard: React.FC<{
 export const SmartReorderScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { menuItems, orders } = useDataStore();
-  const { patterns, analyzeOrders, getSuggestions, isLoaded, load } = useSmartReorderStore();
+  const { data: menuItems = [] } = useMenuQuery();
+  const { data: orders = [] } = useOrdersQuery(user?.id, 'customer');
+  const { analyzeOrders, getSuggestions, isLoaded, load } = useSmartReorderStore();
   const { addItem } = useCartStore();
 
   useEffect(() => { if (!isLoaded) load(); }, [isLoaded, load]);

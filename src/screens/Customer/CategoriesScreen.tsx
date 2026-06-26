@@ -11,7 +11,7 @@ import {
 import { Image } from 'expo-image';
 import { PLACEHOLDER_BLURHASH, IMAGE_TRANSITION_MS } from '../../constants/images';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMenuQuery } from '../../hooks/useMenuQuery';
 import { CategorySkeleton } from '../../components/skeletons/CategorySkeleton';
@@ -91,11 +91,12 @@ const MenuItemCard = React.memo<{
 export const CategoriesScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { category: initialCategory } = useLocalSearchParams<{ category?: string }>();
   const { width } = useWindowDimensions();
   const { data: menuItems = [], isLoading: menuLoading } = useMenuQuery();
   const { addItem } = useCartStore();
   const [selectedCategory, setSelectedCategory] =
-    useState<MenuCategory>('burgers');
+    useState<MenuCategory>((initialCategory as MenuCategory) ?? 'burgers');
   const [search, setSearch] = useState('');
 
   // Always 2 columns for compact grid

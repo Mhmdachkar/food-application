@@ -7,12 +7,14 @@ import {
   Pressable,
   Animated,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMenuQuery } from '../../hooks/useMenuQuery';
 import { useOrdersQuery } from '../../hooks/useOrdersQuery';
+import { EmptyState } from '../../theme/components/EmptyState';
 import { HomeSkeleton } from '../../components/skeletons/HomeSkeleton';
 import { useCartStore } from '../../state/CartStore';
 import { useAuthStore } from '../../state/AuthStore';
@@ -40,7 +42,7 @@ export const CustomerHomeScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, role } = useAuthStore();
-  const { data: menuItems = [], isLoading: menuLoading } = useMenuQuery();
+  const { data: menuItems = [], isLoading: menuLoading, isError: menuError, refetch: refetchMenu } = useMenuQuery();
   const { data: orders = [] } = useOrdersQuery(user?.id, role);
   const { addItem, itemCount, total } = useCartStore();
   const { recentItems } = useRecentlyViewed();
@@ -87,6 +89,20 @@ export const CustomerHomeScreen: React.FC = () => {
     return <HomeSkeleton />;
   }
 
+  if (menuError && menuItems.length === 0) {
+    return (
+      <View style={[s.container, { paddingTop: insets.top }]}>
+        <EmptyState
+          title="Couldn't load the menu"
+          message="Please check your connection and try again."
+        />
+        <TouchableOpacity style={s.retryBtn} onPress={() => refetchMenu()}>
+          <Text style={s.retryBtnText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
       <FlatList
@@ -107,7 +123,9 @@ export const CustomerHomeScreen: React.FC = () => {
                 <Ionicons name="location" size={18} color={colors.accent} />
                 <View style={s.locationText}>
                   <Text style={s.locationLabel}>Deliver to</Text>
-                  <Text style={s.locationAddress} numberOfLines={1}>123 Main Street</Text>
+                  <Text style={s.locationAddress} numberOfLines={1}>
+                    {user?.address?.street ?? user?.address?.city ?? 'Set your address'}
+                  </Text>
                 </View>
                 <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
               </Pressable>
@@ -121,7 +139,7 @@ export const CustomerHomeScreen: React.FC = () => {
 
             {/* ── Active Order Tracker ── */}
             {activeOrders.length > 0 && (
-              <Pressable style={s.liveOrderCard} onPress={() => router.push('/customer/orders' as any)}>
+              <Pressable style={s.liveOrderCard} onPress={() => router.push(`/customer/order/${activeOrders[0].id}` as any)}>
                 <View style={s.liveOrderDot} />
                 <View style={s.liveOrderContent}>
                   <Text style={s.liveOrderTitle}>Order in progress</Text>
@@ -136,7 +154,7 @@ export const CustomerHomeScreen: React.FC = () => {
             {/* ── Categories Grid ── */}
             <View style={s.catGrid}>
               {categories.map(cat => (
-                <Pressable key={cat} style={s.catItem} onPress={() => router.push('/customer/categories' as any)}>
+                <Pressable key={cat} style={s.catItem} onPress={() => router.push({ pathname: '/customer/categories' as any, params: { category: cat } })}>
                   <View style={s.catIconWrap}>
                     <Text style={s.catEmoji}>{CAT_EMOJI[cat] ?? '\uD83C\uDF7D\uFE0F'}</Text>
                   </View>
@@ -323,5 +341,11 @@ const s = StyleSheet.create({
   cartBadgeNum: { fontSize: 12, fontWeight: '900', color: colors.accent },
   cartBarTitle: { fontSize: 15, fontWeight: '700', color: colors.textInverse },
   cartBarTotal: { fontSize: 15, fontWeight: '800', color: colors.textInverse },
+  retryBtn: {
+    alignSelf: 'center', marginTop: spacing.lg,
+    backgroundColor: colors.accent, paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 4, borderRadius: radii.button,
+  },
+  retryBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
 });
 
