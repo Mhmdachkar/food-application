@@ -39,6 +39,27 @@ const CATEGORY_MAP: Record<string, MenuCategory> = {
   Bowls: 'bowls',
 };
 
+/* Reverse mapping — enum → DB category name for writes */
+const ENUM_TO_CATEGORY_NAME: Record<MenuCategory, string> = {
+  burgers: 'Burgers', pizza: 'Pizza', sushi: 'Sushi', salads: 'Salads',
+  pasta: 'Pasta', chicken: 'Chicken', seafood: 'Seafood', desserts: 'Desserts',
+  drinks: 'Drinks', sides: 'Sides', breakfast: 'Breakfast', bowls: 'Bowls',
+};
+
+export interface MenuItemPayload {
+  name: string;
+  description: string;
+  category: MenuCategory;
+  price: number;
+  imageUrl: string;
+  calories: number;
+  prepTimeMinutes: number;
+  tags: string[];
+  ingredients: string[];
+  allergens: string[];
+  isAvailable: boolean;
+}
+
 export class MenuService {
   private client: SupabaseClient;
   state: MenuServiceState = {
@@ -216,6 +237,92 @@ export class MenuService {
     } catch {
       // ignore
     }
+  }
+
+  async createItem(payload: MenuItemPayload): Promise<string | null> {
+    const categoryId = this.getCategoryId(payload.category);
+    try {
+      const { data, error } = await this.client
+        .from('menu_items')
+        .insert({
+          name: payload.name,
+          description: payload.description || null,
+          category_id: categoryId,
+          price: payload.price,
+          image_url: payload.imageUrl || null,
+          calories: payload.calories || null,
+          prep_time_minutes: payload.prepTimeMinutes || null,
+          tags: payload.tags.length ? payload.tags : null,
+          ingredients: payload.ingredients.length ? payload.ingredients : null,
+          allergens: payload.allergens.length ? payload.allergens : null,
+          is_available: payload.isAvailable,
+          nutrition_info: payload.calories
+            ? { calories: payload.calories, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
+            : null,
+        })
+        .select('id')
+        .single();
+      if (error) {
+        logger.error('[MENU] createItem error:', error.message);
+        return null;
+      }
+      return (data as { id: string } | null)?.id ?? null;
+    } catch (e: any) {
+      logger.error('[MENU] createItem exception:', e?.message);
+      return null;
+    }
+  }
+
+  async updateItem(id: string, payload: MenuItemPayload): Promise<boolean> {
+    const categoryId = this.getCategoryId(payload.category);
+    try {
+      const { error } = await this.client
+        .from('menu_items')
+        .update({
+          name: payload.name,
+          description: payload.description || null,
+          category_id: categoryId,
+          price: payload.price,
+          image_url: payload.imageUrl || null,
+          calories: payload.calories || null,
+          prep_time_minutes: payload.prepTimeMinutes || null,
+          tags: payload.tags.length ? payload.tags : null,
+          ingredients: payload.ingredients.length ? payload.ingredients : null,
+          allergens: payload.allergens.length ? payload.allergens : null,
+          is_available: payload.isAvailable,
+        })
+        .eq('id', id);
+      if (error) {
+        logger.error('[MENU] updateItem error:', error.message);
+        return false;
+      }
+      return true;
+    } catch (e: any) {
+      logger.error('[MENU] updateItem exception:', e?.message);
+      return false;
+    }
+  }
+
+  async deleteItem(id: string): Promise<boolean> {
+    try {
+      const { error } = await this.client
+        .from('menu_items')
+        .delete()
+        .eq('id', id);
+      if (error) {
+        logger.error('[MENU] deleteItem error:', error.message);
+        return false;
+      }
+      return true;
+    } catch (e: any) {
+      logger.error('[MENU] deleteItem exception:', e?.message);
+      return false;
+    }
+  }
+
+  private getCategoryId(cat: MenuCategory): string | null {
+    const name = ENUM_TO_CATEGORY_NAME[cat];
+    return this.state.categories.find(c => c.name === name)?.id ?? null;
   }
 }
 
